@@ -129,10 +129,11 @@ Part of my dotfiles: [tungsten-w/.config](https://github.com/tungsten-w/.config)
 ## 🗺️ Roadmap
 
 - [ ] Config file for custom paths (drop the hard-coded `~/Pictures/Wallpapers`)
-- [ ] Proper `install.sh` <--- (im working on it )
-
+- [ ] Proper `install.sh` <--- (im working on it ( ˘͈ ᵕ ˘͈♡))
+- [ ] Transitions
 ---
 
 ## 📄 License
 
 Released under the [MIT License](LICENSE).
+please feel free to fork and modify it to your liking. And please star it if you like it! it really helps!
