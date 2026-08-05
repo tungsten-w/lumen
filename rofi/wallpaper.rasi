@@ -1,0 +1,103 @@
+configuration {
+    modi: "drun,run";
+    show-icons: true;
+    icon-theme: "Papirus";
+    font: "Comfortaa 12";
+}
+
+element-icon {
+    size: 340px; /* Augmente la taille des icônes */
+    vertical-align:0.5;
+    horizontal-align:0.5;
+    border: 3px;
+    border-radius: 25;
+    padding: -100px;
+    background-color:  @background;
+}
+
+@import "~/.config/rofi/colors.rasi"
+@import "~/.cache/wal/colors-rofi-dark.rasi"
+
+window {
+    width: 998px;
+    height: 844px;
+    location: center;
+    border: 1px;
+    border: 3px;
+    border-radius: 20px;
+    background-color:@background ;  // 50% de transparence #00000080
+    border-color: @urgent-background;
+    transparency: "real";
+    padding: 15px; /* Espace autour du contenu de la fenêtre */
+}
+
+element {
+    enabled:                     true;
+    spacing:                     0px;
+    padding:                     10px;
+    border-radius:               25px;
+    background-color:            transparent;
+    text-color:                  #151514; /* from pywal */
+    cursor:                      pointer;
+    orientation:                 vertical;
+}
+
+element-text {
+    enabled: false; /* This will hide the wallpaper titles */
+}
+
+#listview {
+    border-color: @border-color;
+    scrollbar: true;
+    padding: 0px;
+    spacing: 10px; /* Espace entre les éléments */
+    columns: 3; /* Ajoute 2 colonnes */
+    border: 3px;
+    border-radius: 20px;
+    lines: 10;
+}
+
+inputbar {
+    enabled:                     true;
+    spacing:                     10px;
+    padding:                     100px 60px;
+    background-color:            transparent;
+    background-image:         url("/tmp/current_wallpaper.png", width);
+    text-color:                  #151514; /* from pywal */
+    orientation:                 horizontal;
+    border-radius: 10px;
+    children:                    [ "idk", "dummy", "mode-switcher" ];
+    border-color:                @urgent-background; /* Then define color */
+    border: 3px;
+}
+
+idk {
+    enabled: true;
+    spacing:                     10px;
+    padding:                     10px 60px;
+    background-color:            transparent;
+    text-color:                  #151514; /* from pywal */
+    orientation:                 vertical;
+    children:                    [ "search-icon-whatever", "entry" ];
+}
+
+dummy {
+    expand:                      true;
+    background-color:            transparent;
+}
+
+entry {
+    enabled:                     true;
+    expand:                      false;
+    width:                       300px;
+    padding:                     11px 15px; /* Adjusted padding for border */
+    border:                      1px solid;   /* Define style and width */
+    border-color:                @urgent-background; /* Then define color */
+    border-radius:               1%;
+    border: 3px;
+    background-color:            @background; /* main background for field */
+    text-color:                  @foreground; /* main text color */
+    cursor:                      text;
+    placeholder:                 " Wallpapers";
+    placeholder-color:           inherit;
+}

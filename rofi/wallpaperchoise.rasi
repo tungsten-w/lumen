@@ -1,0 +1,83 @@
+configuration {
+    modi: "drun,run";
+    show-icons: true;
+    font: "comfortaa 45";
+}
+
+@import "~/.config/rofi/colors.rasi"
+@import "~/.cache/wal/colors-rofi-dark.rasi"
+
+element-icon {
+    size: 0px; /* augmente la taille des icônes */
+    border: 0px;
+    background-color:  @background;
+}
+window {
+    width: 700px;
+    height: 160px;
+    location: center;
+    border: 3px;
+    border-radius: 20px;
+    border-color: @urgent-background;
+    transparency: "real";
+    padding: 15px; /* espace autour du contenu de la fenêtre */
+    background-image:            url("/tmp/current_wallpaper.png", width);
+}
+#listview {
+    border-color: @urgent-background;
+    location: center;
+    scrollbar: false;
+    padding: 7px;
+    spacing: 10px; /* espace entre les éléments */
+    columns: 2; /* ajoute 2 colonnes */
+    border: 2px;
+    border-radius: 200px;
+    lines: 0;
+}
+element {
+    padding: 10px;
+    text-color: @accent;
+    border-radius: 800px;
+    border: 0px ;
+}
+element-text {
+    text-color:                     @foreground;
+    horizontal-align:               0.45;
+    vertical-align:                 0.45;
+    border:                         9px;
+    border-radius:                  50px;
+    }
+mainbox {
+    layout:                      horizontal; /* aligns elements horizontally */
+    spacing:                     10px; /* space between elements */
+    horizontal-align:            0.45; /* centre le texte horizontalement */
+    vertical-align:              0.45; /* centre verticalement (si supporté) */
+    border-radius:               500px;
+}
+inputbar {
+    enabled:                     false;
+    spacing:                     10px;
+    padding:                     100px 60px;
+    background-color:            transparent;
+    background-image:            url("/tmp/current_wallpaper.png", width);
+    text-color:                  @foreground;
+    orientation:                 horizontal;
+    border-radius:               10px;
+    children:                    [ "idk", "dummy", "mode-switcher" ];
+    border-color:                @foreground;
+    border:                      1px;
+}
+idk {
+    enabled: true;
+    spacing:                     10px;
+    padding:                     10px 60px;
+    background-color:
+    transparent;
+    text-color:                  @foreground;
+    orientation:                 vertical;
+    children:                    [ "search-icon-whatever", "entry" ];
+}
+dummy {
+    expand:                      true;
+    background-color:            transparent;
+}
