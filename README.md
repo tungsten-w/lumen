@@ -28,6 +28,7 @@ No more editing five config files by hand every time you change your background.
 ## 🎨 Features
 
 -  **Wallpaper switching** with smooth transitions via [`awww`](https://github.com/LGFae/swww)
+-  **rofi picker** with live thumbnail previews (auto-generated with ImageMagick)
 -  **Coordinated light / dark theming** across the whole system
 -  **Dual palette engines** — [pywal](https://github.com/dylanaraps/pywal) + [matugen](https://github.com/InioX/matugen) (GTK, rofi, tmux, Ghostty, Spicetify, Neovim…)
 -  **Cursor swap** — Bibata Classic (dark) ↔ Bibata Ice (light)
@@ -36,7 +37,7 @@ No more editing five config files by hand every time you change your background.
 -  **Spicetify** live re-theme when Spotify is running
 -  **Auto mode** — pick a random wallpaper by *time of day* (day / sunset / night)
 -  **Seasonal mode** — pick a random wallpaper by *season*
--  **rofi picker** with live thumbnail previews (auto-generated with ImageMagick)
+-  **recognition script** a script that recognizes what's on a wall (animal/colors...) (not fully implemented yet)
 
 ---
 
