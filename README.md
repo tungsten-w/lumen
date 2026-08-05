@@ -24,7 +24,7 @@ and more all switch to match, light or dark.
 No more editing five config files by hand every time you change your background.
 
 ---
-![image alt](![image alt](https://github.com/tungsten-w/lumen/blob/main/showcase/showcase.png)
+![image alt](https://github.com/tungsten-w/lumen/blob/main/showcase/showcase.png)
 ---
 ## 🎨 Features
 
