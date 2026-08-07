@@ -22,7 +22,8 @@ Choose an image through a rofi menu — or let `lumen` pick one automatically ba
 and more all switch to match, light or dark.
 
 No more editing five config files by hand every time you change your background.
-
+---
+![image alt](https://github.com/tungsten-w/lumen/blob/main/showcase/showcase.png)
 ---
 
 ##  Features
@@ -120,14 +121,14 @@ Launch `lumen` and pick a mode from the rofi menu:
 
 ---
 
-## 🖥️ My setup
+##  My setup
 
 Built and daily-driven on Hyprland.
 Part of my dotfiles: [tungsten-w/.config](https://github.com/tungsten-w/.config)
 
 ---
 
-## 🗺️ Roadmap
+##  Roadmap
 
 - [ ] Config file for custom paths (drop the hard-coded `~/Pictures/Wallpapers`)
 - [ ] Proper `install.sh` <--- (im working on it ( ˘͈ ᵕ ˘͈♡))
