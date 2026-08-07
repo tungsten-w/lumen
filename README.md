@@ -14,7 +14,7 @@ This is built for Wayland and more specifically for hyprland.
 
 ---
 
-## ✨ What is this?
+##  What is this?
 
 `lumen` picks a wallpaper and **propagates its palette across your entire desktop** in one shot.
 Choose an image through a rofi menu — or let `lumen` pick one automatically based on the
@@ -24,9 +24,8 @@ and more all switch to match, light or dark.
 No more editing five config files by hand every time you change your background.
 
 ---
-![image alt](https://github.com/tungsten-w/lumen/blob/main/showcase/showcase.png)
----
-## 🎨 Features
+
+##  Features
 
 -  **Wallpaper switching** with smooth transitions via [`awww`](https://github.com/LGFae/swww)
 -  **rofi picker** with live thumbnail previews (auto-generated with ImageMagick)
@@ -42,7 +41,7 @@ No more editing five config files by hand every time you change your background.
 
 ---
 
-## 🧠 How it works
+##  How it works
 
 ```
    wallpaper  ─►  matugen / pywal  ─►  palette extracted
@@ -57,7 +56,7 @@ in dark or light mode depending on your choice (or the time of day).
 
 ---
 
-## 📦 Dependencies
+##  Dependencies
 
 | Tool | Role |
 |------|------|
@@ -75,7 +74,7 @@ in dark or light mode depending on your choice (or the time of day).
 
 ---
 
-## 🚀 Installation
+##  Installation
 
 ```bash
 git clone https://github.com/tungsten-w/lumen.git
@@ -91,7 +90,7 @@ bind = $mainMod, W, exec, ~/path/to/lumen.sh
 
 ---
 
-## 📁 Expected wallpaper layout
+##  Expected wallpaper layout
 
 `lumen` expects your wallpapers organised like this under `~/Pictures/Wallpapers/`:
 
@@ -108,16 +107,16 @@ Thumbnails are generated automatically into a hidden `.thumbnails/` folder in ea
 
 ---
 
-## 🎮 Usage
+##  Usage
 
 Launch `lumen` and pick a mode from the rofi menu:
 
 | Option | What it does |
 |--------|--------------|
-| 🌙 Dark | Browse `dark/` wallpapers with thumbnails |
-| ☀️ Light | Browse `light/` wallpapers with thumbnails |
-| 🕑 Time | Random wallpaper matching the current time of day |
-| 🍂 Season | Random wallpaper matching the current season |
+|  Dark | Browse `dark/` wallpapers with thumbnails |
+|  Light | Browse `light/` wallpapers with thumbnails |
+|  Time | Random wallpaper matching the current time of day |
+|  Season | Random wallpaper matching the current season |
 
 ---
 
@@ -133,9 +132,9 @@ Part of my dotfiles: [tungsten-w/.config](https://github.com/tungsten-w/.config)
 - [ ] Config file for custom paths (drop the hard-coded `~/Pictures/Wallpapers`)
 - [ ] Proper `install.sh` <--- (im working on it ( ˘͈ ᵕ ˘͈♡))
 - [ ] Transitions
----
 
-## 📄 License
+---
+##  License
 
 Released under the [MIT License](LICENSE).
-please feel free to fork and modify it to your liking. And please star it if you like it! it really helps!
+please feel free to fork and modify it to your liking.
