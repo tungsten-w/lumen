@@ -17,11 +17,12 @@ This is built for Wayland and more specifically for hyprland.
 ##  What is this?
 
 `lumen` picks a wallpaper and **propagates its palette across your entire desktop** in one shot.
-Choose an image through a rofi menu — or let `lumen` pick one automatically based on the
-**season and/or time of day** — and watch pywal, matugen, your cursor, Noctalia Shell, Obsidian
+Choose an image through a rofi menu or let `lumen` pick one automatically based on the
+**season and/or time of day** and watch pywal, matugen, your cursor, Noctalia Shell, Obsidian
 and more all switch to match, light or dark.
 
 No more editing five config files by hand every time you change your background.
+
 ---
 ![image alt](https://github.com/tungsten-w/lumen/blob/main/showcase/showcase.png)
 ---
@@ -31,13 +32,13 @@ No more editing five config files by hand every time you change your background.
 -  **Wallpaper switching** with smooth transitions via [`awww`](https://github.com/LGFae/swww)
 -  **rofi picker** with live thumbnail previews (auto-generated with ImageMagick)
 -  **Coordinated light / dark theming** across the whole system
--  **Dual palette engines** — [pywal](https://github.com/dylanaraps/pywal) + [matugen](https://github.com/InioX/matugen) (GTK, rofi, tmux, Ghostty, Spicetify, Neovim…)
--  **Cursor swap** — Bibata Classic (dark) ↔ Bibata Ice (light)
+-  **Dual palette engines** [pywal](https://github.com/dylanaraps/pywal) + [matugen](https://github.com/InioX/matugen) (GTK, rofi, tmux, Ghostty, Spicetify, Neovim…)
+-  **Cursor swap** Bibata Classic (dark) ↔ Bibata Ice (light)
 -  **Noctalia Shell v5** theme + wallpaper sync
 -  **Obsidian** base-theme switching (Obsidian dark ↔ Moonstone light)
 -  **Spicetify** live re-theme when Spotify is running
--  **Auto mode** — pick a random wallpaper by *time of day* (day / sunset / night)
--  **Seasonal mode** — pick a random wallpaper by *season*
+-  **Auto mode** pick a random wallpaper by *time of day* (day / sunset / night)
+-  **Seasonal mode** pick a random wallpaper by *season*
 -  **recognition script** a script that recognizes what's on a wall (animal/colors...) (not fully implemented yet)
 
 ---
