@@ -1,6 +1,6 @@
 <div align="center">
 
-#  ✦ Lumen ✦ v2.2
+#  ✦ Lumen ✦ v2.3
 
 <br>
     
@@ -134,7 +134,8 @@ Part of my dotfiles: [tungsten-w/.config](https://github.com/tungsten-w/.config)
 - [ ] Config file for custom paths (drop the hard-coded `~/Pictures/Wallpapers`)
 - [ ] Proper `install.sh` <--- (im working on it ( ˘͈ ᵕ ˘͈♡))
 - [ ] Transitions
-
+- [x] use rust instead of bash
+- [ ] Quickshell
 ---
 ##  License
 
