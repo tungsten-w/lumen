@@ -1,6 +1,6 @@
 <div align="center">
 
-#  ✦ Lumen ✦ v2.3
+#  ✦ Lumen ✦ v2.3.1
 
 <br>
     
@@ -78,16 +78,30 @@ in dark or light mode depending on your choice (or the time of day).
 
 ##  Installation
 
+### Option 1 — prebuilt binary (recommended)
+
+Grab the latest `lumen-*-x86_64-linux-gnu.tar.gz` from the
+[Releases page](https://github.com/tungsten-w/lumen/releases), then:
+
+```bash
+tar xzf lumen-*-x86_64-linux-gnu.tar.gz
+chmod +x lumen
+sudo mv lumen /usr/local/bin/
+```
+
+### Option 2 — build from source
+
 ```bash
 git clone https://github.com/tungsten-w/lumen.git
-cd lumen
-chmod +x lumen.sh
+cd lumen/lumen
+cargo build --release
+# binary at target/release/lumen
 ```
 
 Bind it to a key in your Hyprland config, e.g.:
 the recommended keybind is `W` (mod + W)
 ```ini
-bind = $mainMod, W, exec, ~/path/to/lumen.sh
+bind = $mainMod, W, exec, /usr/local/bin/lumen
 ```
 
 ---

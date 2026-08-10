@@ -1,0 +1,38 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "lumen -> target"
+
+      - name: Build release binary
+        run: cargo build --release --manifest-path lumen/Cargo.toml
+
+      - name: Package archive
+        run: |
+          tar czf lumen-${{ github.ref_name }}-x86_64-linux-gnu.tar.gz \
+            -C lumen/target/release lumen
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: lumen-*.tar.gz
+          generate_release_notes: true
