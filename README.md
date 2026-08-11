@@ -1,16 +1,37 @@
 <div align="center">
 
-#  ✦ Lumen ✦ v2.3.1
+<img src="https://github.com/tungsten-w/lumen/blob/main/showcase/lumen%20design%20smol.png?raw=1" alt="Lumen" width="460">
 
-<br>
-    
-</div>
+#  ✦ Lumen ✦
 
-One wallpaper. One command. Your whole desktop shifts.
+**One wallpaper. One command. Your whole desktop shifts.**
+
 A rofi-driven wallpaper picker that paints your entire Hyprland desktop —> light or dark from a single image.
 This is built for Wayland and more specifically for hyprland.
 
-![Wayland](https://img.shields.io/badge/Display-Wayland-green)
+![version](https://img.shields.io/badge/version-2.3.1-474064?style=flat-square) ![Rust](https://img.shields.io/badge/built_with-Rust-474064?style=flat-square&logo=rust&logoColor=white) ![Hyprland](https://img.shields.io/badge/Wayland-Hyprland-474064?style=flat-square&logo=hyprland&logoColor=white) ![License](https://img.shields.io/badge/license-MIT-474064?style=flat-square)
+
+</div>
+
+---
+
+##  ⚡ Quick start
+
+```bash
+# 1 — grab the latest binary from the Releases page
+tar xzf lumen-*-x86_64-linux-gnu.tar.gz
+sudo install -m 755 lumen /usr/local/bin/
+
+# 2 — drop your wallpapers in
+mkdir -p ~/Pictures/Wallpapers/{dark,light}
+```
+
+```ini
+# 3 — bind it in ~/.config/hypr/hyprland.conf
+bind = $mainMod, W, exec, /usr/local/bin/lumen
+```
+
+That's it — hit <kbd>Super</kbd>+<kbd>W</kbd> and pick an image.
 
 ---
 
@@ -24,7 +45,13 @@ and more all switch to match, light or dark.
 No more editing five config files by hand every time you change your background.
 
 ---
-![image alt](https://github.com/tungsten-w/lumen/blob/main/showcase/showcase.png)
+
+<div align="center">
+
+![Lumen showcase](https://github.com/tungsten-w/lumen/blob/main/showcase/showcase.png?raw=1)
+
+</div>
+
 ---
 
 ##  Features
