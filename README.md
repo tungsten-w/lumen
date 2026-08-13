@@ -181,5 +181,5 @@ Part of my dotfiles: [tungsten-w/.config](https://github.com/tungsten-w/.config)
 ##  License
 
 Released under the [MIT License](LICENSE).
-please feel free to fork and modify it to your liking.
+please feel free to fork and modify it to your liking.  
 Art by : _.x1ansheng._   (check her instagram plz ૮꒰ ˶• ༝ •˶꒱ა ♡)
