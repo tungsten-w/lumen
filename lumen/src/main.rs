@@ -167,10 +167,16 @@ fn generate_thumbnails(pairs: &[(&PathBuf, PathBuf)]) {
     });
 }
 
-/// apply a (dark/light) wallpaper with rofi picker
-fn pick_with_rofi(dir: &Path) -> Option<PathBuf> {
+/// Every wallpaper of `dir`, paired with its thumbnail and ready to display.
+///
+/// Both front-ends need the same list, so the scan, the sort and the thumbnail
+/// refresh all happen here.
+fn wallpaper_entries(dir: &Path) -> Vec<(PathBuf, PathBuf)> {
     let thumb_dir = dir.join(".thumbnails");
-    fs::create_dir_all(&thumb_dir).ok()?;
+    if fs::create_dir_all(&thumb_dir).is_err() {
+        eprintln!("Erreur : impossible de créer {}.", thumb_dir.display());
+        std::process::exit(1);
+    }
 
     let mut images = find_images(dir, &thumb_dir);
     if images.is_empty() {
@@ -179,7 +185,6 @@ fn pick_with_rofi(dir: &Path) -> Option<PathBuf> {
     }
     images.sort();
 
-    // Pair every image with its thumbnail once; both loops below reuse this.
     let pairs: Vec<(&PathBuf, PathBuf)> = images
         .iter()
         .filter_map(|img| {
@@ -190,9 +195,19 @@ fn pick_with_rofi(dir: &Path) -> Option<PathBuf> {
 
     generate_thumbnails(&pairs);
 
+    pairs
+        .into_iter()
+        .map(|(img, thumb)| (img.clone(), thumb))
+        .collect()
+}
+
+/// apply a (dark/light) wallpaper with rofi picker
+fn pick_with_rofi(dir: &Path) -> Option<PathBuf> {
+    let entries = wallpaper_entries(dir);
+
     // rofi selection
-    let mut input = String::with_capacity(pairs.len() * 128);
-    for (img, thumb) in &pairs {
+    let mut input = String::with_capacity(entries.len() * 128);
+    for (img, thumb) in &entries {
         let Some(file_name) = img.file_name() else { continue };
         input.push_str(&file_name.to_string_lossy());
         input.push_str("\0icon\x1f");
@@ -224,6 +239,31 @@ fn pick_with_rofi(dir: &Path) -> Option<PathBuf> {
         std::process::exit(0);
     }
     Some(dir.join(selected))
+}
+
+/// apply a (dark/light) wallpaper with the Quickshell picker
+fn pick_with_quickshell(config: &Path, dir: &Path) -> Option<PathBuf> {
+    let entries = wallpaper_entries(dir);
+
+    let items: Vec<serde_json::Value> = entries
+        .iter()
+        .filter_map(|(img, thumb)| {
+            Some(serde_json::json!({
+                "name": img.file_name()?.to_string_lossy(),
+                "path": img.to_string_lossy(),
+                "thumb": thumb.to_string_lossy(),
+            }))
+        })
+        .collect();
+    let list = serde_json::json!({ "items": items }).to_string();
+
+    let selected = run_quickshell(config, "picker", Some(&list))?;
+    if selected.is_empty() {
+        std::process::exit(0);
+    }
+    // Unlike rofi, which can only echo the line it was given, the Quickshell
+    // picker answers with the full path — so wallpapers in sub-directories work.
+    Some(PathBuf::from(selected))
 }
 
 /// apply a random wallpaper (season/hour)
@@ -442,13 +482,169 @@ fn apply_all(wallpaper: &Path, dark: bool) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// MAIN MENU (ROFI)
+// MAIN MENU (QUICKSHELL / ROFI)
 // ══════════════════════════════════════════════════════════════
 
 const ICON_DARK: char = '\u{f4ee}';
 const ICON_LIGHT: char = '\u{f522}';
 const ICON_HEURE: char = '\u{f1803}';
 const ICON_SAISON: char = '\u{f1a79}';
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Mode {
+    Dark,
+    Light,
+    Heure,
+    Saison,
+}
+
+impl Mode {
+    /// rofi can only echo back the line it was handed, so it answers with the
+    /// glyph; the Quickshell menu answers with a name, which is what makes its
+    /// QML readable. Both spellings are accepted here.
+    fn parse(answer: &str) -> Option<Mode> {
+        match answer {
+            "dark" => Some(Mode::Dark),
+            "light" => Some(Mode::Light),
+            "time" => Some(Mode::Heure),
+            "season" => Some(Mode::Saison),
+            _ => match answer.chars().next() {
+                Some(ICON_DARK) => Some(Mode::Dark),
+                Some(ICON_LIGHT) => Some(Mode::Light),
+                Some(ICON_HEURE) => Some(Mode::Heure),
+                Some(ICON_SAISON) => Some(Mode::Saison),
+                _ => None,
+            },
+        }
+    }
+}
+
+/// Which of the two front-ends draws the prompts.
+enum Frontend {
+    /// The Quickshell config to run, i.e. the `shell.qml` of `quickshell/lumen`.
+    Quickshell(PathBuf),
+    Rofi,
+}
+
+impl Frontend {
+    /// Quickshell as soon as `qs` and the config are both installed, rofi
+    /// otherwise. `LUMEN_FRONTEND=rofi` pins the old front-end, which is also
+    /// what happens automatically if `qs` ever fails to start.
+    fn detect() -> Frontend {
+        if std::env::var("LUMEN_FRONTEND").as_deref() == Ok("rofi") {
+            return Frontend::Rofi;
+        }
+
+        let candidates = [
+            std::env::var_os("LUMEN_QS_CONFIG").map(PathBuf::from),
+            Some(home_dir().join(".config/quickshell/lumen/shell.qml")),
+            // Running straight from a clone of the dotfiles repository.
+            Some(home_dir().join(".config/lumen/quickshell/lumen/shell.qml")),
+        ];
+
+        match candidates.into_iter().flatten().find(|path| path.is_file()) {
+            Some(config) if has_command("qs") => Frontend::Quickshell(config),
+            _ => Frontend::Rofi,
+        }
+    }
+}
+
+fn has_command(name: &str) -> bool {
+    std::env::var_os("PATH").is_some_and(|path| {
+        std::env::split_paths(&path).any(|dir| dir.join(name).is_file())
+    })
+}
+
+/// A scratch file to talk to the Quickshell process with. XDG_RUNTIME_DIR is a
+/// user-owned tmpfs, so the wallpaper list never reaches the disk, and the pid
+/// keeps two `lumen` runs from reading each other's answer.
+fn runtime_file(name: &str) -> PathBuf {
+    std::env::var_os("XDG_RUNTIME_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir)
+        .join(format!("lumen-{name}-{}", std::process::id()))
+}
+
+/// Shows one Quickshell prompt and waits for it, the way rofi was waited for.
+///
+/// `Some("")` is a cancelled prompt — Escape, or a click outside the window.
+/// `None` means `qs` itself never got as far as answering, and the caller should
+/// fall back to rofi rather than leave the user without a picker.
+fn run_quickshell(config: &Path, mode: &str, items: Option<&str>) -> Option<String> {
+    let result = runtime_file("result");
+    // A leftover answer from an earlier run would be indistinguishable from
+    // this one's, and the picker only writes the file when something is chosen.
+    let _ = fs::remove_file(&result);
+
+    let items_file = items.map(|json| {
+        let path = runtime_file("items");
+        let _ = fs::write(&path, json);
+        path
+    });
+
+    let mut command = Command::new("qs");
+    command
+        .arg("-p")
+        .arg(config)
+        .env("LUMEN_MODE", mode)
+        .env("LUMEN_RESULT", &result);
+    if let Some(path) = &items_file {
+        command.env("LUMEN_ITEMS", path);
+    }
+    let status = command.status();
+
+    let answer = fs::read_to_string(&result).unwrap_or_default().trim().to_string();
+    let _ = fs::remove_file(&result);
+    if let Some(path) = items_file {
+        let _ = fs::remove_file(path);
+    }
+
+    if !status.map(|s| s.success()).unwrap_or(false) {
+        return None;
+    }
+    Some(answer)
+}
+
+/// Shows the mode menu and waits for one of the four entries.
+fn choose_mode(frontend: &Frontend) -> Option<Mode> {
+    if let Frontend::Quickshell(config) = frontend {
+        if let Some(answer) = run_quickshell(config, "menu", None) {
+            return Mode::parse(&answer);
+        }
+        eprintln!("Quickshell n'a pas répondu, retour à rofi.");
+    }
+
+    let menu = format!("{ICON_DARK}\n{ICON_LIGHT}\n{ICON_HEURE}\n{ICON_SAISON}");
+
+    let mut child = Command::new("rofi")
+        .args(["-dmenu", "-theme"])
+        .arg(home_dir().join(".config/rofi/wallpaperchoise.rasi"))
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("échec du lancement de rofi");
+
+    child
+        .stdin
+        .take()
+        .expect("stdin manquant")
+        .write_all(menu.as_bytes())
+        .expect("échec de l'écriture dans rofi");
+    let output = child.wait_with_output().expect("échec de l'exécution de rofi");
+
+    Mode::parse(String::from_utf8_lossy(&output.stdout).trim())
+}
+
+/// Shows the thumbnail grid for `dir` and waits for a wallpaper.
+fn pick_wallpaper(frontend: &Frontend, dir: &Path) -> Option<PathBuf> {
+    if let Frontend::Quickshell(config) = frontend {
+        if let Some(wallpaper) = pick_with_quickshell(config, dir) {
+            return Some(wallpaper);
+        }
+        eprintln!("Quickshell n'a pas répondu, retour à rofi.");
+    }
+    pick_with_rofi(dir)
+}
 
 /// Deletes thumbnails whose source image is gone (renamed or removed), which
 /// otherwise accumulate in the cache forever. Returns how many were freed.
@@ -521,48 +717,38 @@ fn main() {
         .stderr(Stdio::null())
         .spawn();
 
-    let menu = format!("{ICON_DARK}\n{ICON_LIGHT}\n{ICON_HEURE}\n{ICON_SAISON}");
+    let frontend = Frontend::detect();
 
-    let mut child = Command::new("rofi")
-        .args(["-dmenu", "-theme"])
-        .arg(home_dir().join(".config/rofi/wallpaperchoise.rasi"))
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
-        .expect("échec du lancement de rofi");
-
-    child
-        .stdin
-        .take()
-        .expect("stdin manquant")
-        .write_all(menu.as_bytes())
-        .expect("échec de l'écriture dans rofi");
-    let output = child.wait_with_output().expect("échec de l'exécution de rofi");
-    let choix = String::from_utf8_lossy(&output.stdout).trim().to_string();
-
-    if choix == ICON_DARK.to_string() {
-        // Dark — rofi picker
-        if let Some(wp) = pick_with_rofi(&home_dir().join("Pictures/Wallpapers/dark")) {
-            apply_all(&wp, true);
+    match choose_mode(&frontend) {
+        // Dark — thumbnail picker
+        Some(Mode::Dark) => {
+            if let Some(wp) = pick_wallpaper(&frontend, &home_dir().join("Pictures/Wallpapers/dark")) {
+                apply_all(&wp, true);
+            }
         }
-    } else if choix == ICON_LIGHT.to_string() {
-        // Light — rofi picker
-        if let Some(wp) = pick_with_rofi(&home_dir().join("Pictures/Wallpapers/light")) {
-            apply_all(&wp, false);
+        // Light — thumbnail picker
+        Some(Mode::Light) => {
+            if let Some(wp) = pick_wallpaper(&frontend, &home_dir().join("Pictures/Wallpapers/light")) {
+                apply_all(&wp, false);
+            }
         }
-    } else if choix == ICON_HEURE.to_string() {
         // Heure — random, dark if night/sunset
-        let moment = get_moment_journee();
-        if let Some(wp) = pick_random(&home_dir().join(format!("Pictures/Wallpapers/season-time/{moment}"))) {
-            let dark = moment == "night" || moment == "sunset";
-            apply_all(&wp, dark);
+        Some(Mode::Heure) => {
+            let moment = get_moment_journee();
+            if let Some(wp) = pick_random(&home_dir().join(format!("Pictures/Wallpapers/season-time/{moment}"))) {
+                let dark = moment == "night" || moment == "sunset";
+                apply_all(&wp, dark);
+            }
         }
-    } else if choix == ICON_SAISON.to_string() {
         // Saison — random, light
-        let saison = get_saison();
-        if let Some(wp) = pick_random(&home_dir().join(format!("Pictures/Wallpapers/season-time/{saison}"))) {
-            apply_all(&wp, false);
+        Some(Mode::Saison) => {
+            let saison = get_saison();
+            if let Some(wp) = pick_random(&home_dir().join(format!("Pictures/Wallpapers/season-time/{saison}"))) {
+                apply_all(&wp, false);
+            }
         }
+        // Cancelled.
+        None => {}
     }
 }
 
@@ -600,6 +786,25 @@ mod tests {
         for h in 22..24 {
             assert_eq!(moment_for_hour(h), "night");
         }
+    }
+
+    #[test]
+    fn mode_parses_both_frontends() {
+        // What the Quickshell menu writes.
+        assert_eq!(Mode::parse("dark"), Some(Mode::Dark));
+        assert_eq!(Mode::parse("light"), Some(Mode::Light));
+        assert_eq!(Mode::parse("time"), Some(Mode::Heure));
+        assert_eq!(Mode::parse("season"), Some(Mode::Saison));
+
+        // What rofi echoes back.
+        assert_eq!(Mode::parse(&ICON_DARK.to_string()), Some(Mode::Dark));
+        assert_eq!(Mode::parse(&ICON_LIGHT.to_string()), Some(Mode::Light));
+        assert_eq!(Mode::parse(&ICON_HEURE.to_string()), Some(Mode::Heure));
+        assert_eq!(Mode::parse(&ICON_SAISON.to_string()), Some(Mode::Saison));
+
+        // A cancelled prompt is empty in both cases.
+        assert_eq!(Mode::parse(""), None);
+        assert_eq!(Mode::parse("whatever"), None);
     }
 
     #[test]
