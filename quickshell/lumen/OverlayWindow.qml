@@ -58,6 +58,29 @@ PanelWindow {
     }
     color: "transparent"
 
+    /// Frosted windows: the compositor blurs what is behind them, following the
+    /// cards rather than the surface — the surface covers the whole screen, and
+    /// blurring all of it would frost the desktop rather than the picker.
+    ///
+    /// It only shows through once Color → Background opacity is under 1, and it
+    /// needs a compositor that speaks `ext-background-effect`; where that is
+    /// missing, asking for it is simply ignored.
+    BackgroundEffect.blurRegion: Settings.colors.blur ? blurRegion : null
+
+    Region {
+        id: blurRegion
+
+        item: card
+        radius: Settings.shape.windowRadius
+
+        Region {
+            // Empty while the panel is folded away, or the blur would sit on
+            // its own in the middle of the screen.
+            item: win.asideOpen ? aside : null
+            radius: Settings.shape.windowRadius
+        }
+    }
+
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: `lumen-${win.windowName}`
     // Same as rofi's keyboard grab: every keystroke belongs to the picker while

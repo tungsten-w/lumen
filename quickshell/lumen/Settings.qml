@@ -16,6 +16,7 @@ import Quickshell.Io
 Singleton {
     id: root
 
+    readonly property var modes: adapter.modes
     readonly property var shape: adapter.shape
     readonly property var layout: adapter.layout
     readonly property var animation: adapter.animation
@@ -84,6 +85,16 @@ Singleton {
 
         JsonAdapter {
             id: adapter
+
+            /// Which of the four entries the mode menu offers. The way into the
+            /// settings is not one of them: it is always there, or switching the
+            /// last entry off would leave a menu with no way back.
+            property JsonObject modes: JsonObject {
+                property bool dark: true
+                property bool light: true
+                property bool time: true
+                property bool season: true
+            }
 
             /// Corners and outlines.
             property JsonObject shape: JsonObject {
@@ -163,6 +174,9 @@ Singleton {
                 property string thumbBorder: "auto" // @border-color
                 /// Opacity of the window background. rofi's was opaque.
                 property real opacity: 1
+                /// Asks the compositor to blur what is behind the windows, which
+                /// only shows through once the opacity above is below 1.
+                property bool blur: false
             }
         }
     }
@@ -171,6 +185,12 @@ Singleton {
     /// and the reason every default lives in this file rather than in Style.
     function reset(group: string) {
         const defaults = {
+            modes: {
+                dark: true,
+                light: true,
+                time: true,
+                season: true
+            },
             shape: {
                 windowRadius: 20,
                 border: 3,
@@ -218,6 +238,7 @@ Singleton {
                 lift: 1.012
             },
             colors: {
+                blur: false,
                 background: "auto",
                 foreground: "auto",
                 border: "auto",
@@ -234,7 +255,7 @@ Singleton {
     }
 
     function resetAll() {
-        for (const group of ["shape", "layout", "animation", "colors"]) {
+        for (const group of ["modes", "shape", "layout", "animation", "colors"]) {
             root.reset(group);
         }
     }
