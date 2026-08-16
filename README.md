@@ -209,6 +209,8 @@ lumen --settings            # from a terminal, with the picker beside it as a pr
 ```
 
 - <kbd>Ctrl</kbd>+<kbd>,</kbd> from inside the picker or the mode menu;
+- the **cog**, the fifth entry of the mode menu — it opens the panel straight on
+  its **Menu** tab;
 - or type **`settings` into the picker's search field**. The grid tells you it is
   a command as you type it, and the field clears itself once the panel is out.
 
@@ -217,14 +219,15 @@ It is split into four tabs, so each list is short enough to see nearly whole:
 
 | Tab | What is in it |
 |---|---|
+| **Menu** | Which of the four modes the mode menu offers |
 | **Shape** | Corner radii (windows, header, thumbnails, search field), border widths, the mode menu's pill and ring |
 | **Motion** | Animations on/off, speed, bounce, selection lift, and each duration on its own |
 | **Layout** | Columns and spacing, thumbnail aspect / zoom / padding, **wallpaper backdrop zoom, framing, blur and dim**, window and header sizes, search field, mode menu |
-| **Color** | Background opacity, and the five palette colors |
+| **Color** | Background opacity, blur behind the window, and the five palette colors |
 
 | Panel | |
 |---|---|
-| <kbd>Tab</kbd> / <kbd>1</kbd>…<kbd>4</kbd> | Move between tabs |
+| <kbd>Tab</kbd> / <kbd>1</kbd>…<kbd>5</kbd> | Move between tabs |
 | <kbd>j</kbd> / <kbd>k</kbd> | Move through the settings |
 | <kbd>h</kbd> / <kbd>l</kbd> | Change the value (<kbd>Shift</kbd> for ten times the step) |
 | <kbd>Enter</kbd> | Flip a switch, or pin a color |
@@ -235,6 +238,10 @@ Values are written to `~/.config/lumen/settings.json` as you move a slider —
 there is no save button, and the file is hand-editable and watched, so writing to
 it from an editor restyles an open picker. The last row of each tab, or
 <kbd>r</kbd>, puts that tab back to the rofi measurements.
+
+**Menu** switches the four entries of the mode menu on and off — drop `Season`
+if you never use it and the menu is three entries long. The cog is not one of
+them and never leaves, so turning the last mode off cannot lock you out.
 
 Two of those deserve a word. **Thumbnails → Zoom** is how far into each
 thumbnail the grid crops — rofi fitted the image in a 340px box and clipped it,
@@ -250,16 +257,14 @@ else on offer:
   floating on it. Both are 0 by default, and at 0 the whole effect is skipped
   rather than drawn as a no-op.
 
-For the desktop *behind* the window to be blurred too, Hyprland can do it: the
-two surfaces are named, so
+That blur is the wallpaper *inside* the header. For the desktop **behind the
+whole window**, there is **Color → Blur behind the window**: the compositor
+frosts what is under the cards — following their rounded corners, and the
+settings panel as it slides out — while the rest of the screen stays sharp.
 
-```ini
-# ~/.config/hypr/hyprland.conf
-layerrule = blur, lumen-picker
-layerrule = blur, lumen-menu
-```
-
-and lowering **Color → Background opacity** lets it through.
+It only shows through once **Color → Background opacity** is under 1, and it asks
+the compositor over `ext-background-effect`; a compositor that does not speak it
+simply ignores the request. Hyprland 0.56 does.
 
 Colors start on `auto`, which means "whatever pywal and matugen made of the
 current wallpaper". Pressing <kbd>Enter</kbd> on one pins it to what is on screen
@@ -308,6 +313,9 @@ Launch `lumen` and pick a mode from the menu:
 |  Light | Browse `light/` wallpapers with thumbnails |
 |  Time | Random wallpaper matching the current time of day |
 |  Season | Random wallpaper matching the current season |
+|  Settings | Open the settings panel — see below |
+
+Any of the first four can be switched off from the settings, if you never use one.
 
 ---
 

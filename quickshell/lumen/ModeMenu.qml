@@ -17,25 +17,47 @@ OverlayWindow {
     windowName: "menu"
 
     /// The strings written to the result file are what `lumen` matches on.
-    /// The glyphs are the Nerd Font codepoints the rofi menu was fed.
-    readonly property var entries: [
+    /// The glyphs are the Nerd Font codepoints the rofi menu was fed, plus a cog
+    /// from the same set for the settings.
+    readonly property var allEntries: [
         {
             id: "dark",
-            glyph: String.fromCodePoint(0xf4ee)
+            glyph: String.fromCodePoint(0xf4ee),
+            setting: "dark"
         },
         {
             id: "light",
-            glyph: String.fromCodePoint(0xf522)
+            glyph: String.fromCodePoint(0xf522),
+            setting: "light"
         },
         {
             id: "time",
-            glyph: String.fromCodePoint(0xf1803)
+            glyph: String.fromCodePoint(0xf1803),
+            setting: "time"
         },
         {
             id: "season",
-            glyph: String.fromCodePoint(0xf1a79)
+            glyph: String.fromCodePoint(0xf1a79),
+            setting: "season"
+        },
+        {
+            id: "settings",
+            glyph: String.fromCodePoint(0xf0493),
+            setting: ""
         }
     ]
+
+    /// The four modes can each be switched off from the panel; the way into the
+    /// panel cannot, or switching the last one off would leave a menu with no
+    /// way back.
+    readonly property var entries: win.allEntries.filter(entry => entry.setting === "" || Settings.modes[entry.setting])
+
+    // Switching an entry off under the cursor must not leave the selection past
+    // the end of the menu.
+    onEntriesChanged: {
+        if (win.currentIndex >= win.entries.length)
+            win.currentIndex = Math.max(0, win.entries.length - 1);
+    }
 
     property int currentIndex: 0
     readonly property int currentColumn: currentIndex % Style.menu.columns
@@ -51,7 +73,19 @@ OverlayWindow {
     }
 
     function activate() {
-        Result.accept(win.entries[win.currentIndex].id);
+        const entry = win.entries[win.currentIndex];
+        if (!entry)
+            return;
+
+        // The cog is a way into the panel rather than an answer for `lumen`,
+        // which is still waiting on the four it knows about.
+        if (entry.id === "settings") {
+            settings.openAt("modes");
+            win.asideOpen = true;
+            return;
+        }
+
+        Result.accept(entry.id);
     }
 
     /// The settings panel opens from here too, on the same Ctrl+, as the picker.

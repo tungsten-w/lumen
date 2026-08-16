@@ -24,6 +24,10 @@ Item {
     /// a wall. Each tab is short enough to see nearly whole.
     readonly property var tabs: [
         {
+            key: "modes",
+            label: "Menu"
+        },
+        {
             key: "shape",
             label: "Shape"
         },
@@ -115,6 +119,14 @@ Item {
         });
 
         switch (panel.tabs[panel.tab].key) {
+        case "modes":
+            group("Entries of the mode menu");
+            toggle("modes", "dark", "Dark");
+            toggle("modes", "light", "Light");
+            toggle("modes", "time", "Time of day");
+            toggle("modes", "season", "Season");
+            break;
+
         case "shape":
             group("Corners");
             slider("shape", "windowRadius", "Windows", 0, 60, 0.5, " px");
@@ -186,6 +198,7 @@ Item {
         case "colors":
             group("Window");
             slider("colors", "opacity", "Background opacity", 0.2, 1, 0.01, "");
+            toggle("colors", "blur", "Blur behind the window");
 
             group("Palette");
             for (const colour of panel.colorKeys) {
@@ -238,7 +251,7 @@ Item {
         rows.push({
             kind: "reset",
             group: panel.tabs[panel.tab].key,
-            label: `Reset ${panel.tabs[panel.tab].label.toLowerCase()} to the rofi defaults`
+            label: "Reset"
         });
         return rows;
     }
@@ -282,6 +295,14 @@ Item {
 
     function selectTab(index: int) {
         panel.tab = (index + panel.tabs.length) % panel.tabs.length;
+    }
+
+    /// Opens on a named tab, for whoever asked for the panel to know where they
+    /// wanted to land — the mode menu's own entry opens it on "Menu".
+    function openAt(key: string) {
+        const index = panel.tabs.findIndex(tab => tab.key === key);
+        if (index >= 0)
+            panel.selectTab(index);
     }
 
     /// Acts on the selected row: sliders move by `amount` steps, and anything
