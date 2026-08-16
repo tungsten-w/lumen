@@ -197,7 +197,10 @@ switch if you do not want to: arrows, <kbd>Enter</kbd>, <kbd>Home</kbd>/<kbd>End
 Clicking outside cancels. The mode menu takes `hjkl`, arrows, <kbd>Enter</kbd> and
 <kbd>q</kbd> — it has nothing to type into, so it needs no modes.
 
-### Settings
+<details>
+<summary><b>&nbsp;⚙&nbsp; Settings</b> &mdash; <kbd>Ctrl</kbd>+<kbd>,</kbd>, or type <code>settings</code> in the picker &nbsp;<i>(click to unfold)</i></summary>
+
+<br>
 
 Three ways into the same panel, whichever is closest to hand:
 
@@ -262,6 +265,10 @@ Colors start on `auto`, which means "whatever pywal and matugen made of the
 current wallpaper". Pressing <kbd>Enter</kbd> on one pins it to what is on screen
 right now and opens hue, saturation and lightness under it; pressing
 <kbd>Enter</kbd> again hands it back to the wallpaper.
+
+</details>
+
+---
 
 **rofi is still there.** `lumen` falls back to the old themes whenever `qs` or
 the Quickshell config is missing — or if `qs` fails to start — so nothing breaks
