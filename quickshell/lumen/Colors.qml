@@ -14,20 +14,54 @@ import Quickshell.Io
 /// Parsing those two files instead of keeping a copy of the palette means the
 /// Quickshell picker recolors itself on every wallpaper change for free, and can
 /// never drift away from the rofi version.
+/// Any of them can be pinned to a fixed colour in the settings panel; whatever
+/// is left on `auto` keeps following the wallpaper.
 Singleton {
     id: root
 
-    // Fallbacks, used until the files are parsed and if either one is missing.
-    // They are the values pywal/matugen produced for the default light palette.
-    property color background: "#f5f5f5"
-    property color foreground: "#3d3d3d"
+    // What the two files said. Until they are parsed — and if either one is
+    // missing — these are the values pywal and matugen produced for the default
+    // light palette.
+    property color autoBackground: "#f5f5f5"
+    property color autoForeground: "#3d3d3d"
+    property color autoUrgent: "#d16c95"
+    property color autoSelected: "#37adaa"
+    property color autoBorderColor: "#f5f5f5"
+
+    /// Returns the pinned colour if there is one, and the palette's otherwise.
+    function pick(override: string, fallback: color): color {
+        return (!override || override === Settings.auto) ? fallback : override;
+    }
+
+    /// Window background. Its opacity is a setting of its own, because rofi's
+    /// was opaque and there is no palette entry for "see through".
+    readonly property color background: Qt.alpha(root.pick(Settings.colors.background, root.autoBackground), Math.max(0, Math.min(1, Settings.colors.opacity)))
+    readonly property color foreground: root.pick(Settings.colors.foreground, root.autoForeground)
     /// Border of the window, of the header and of the search field: `@urgent-background`.
-    property color urgent: "#d16c95"
+    readonly property color urgent: root.pick(Settings.colors.border, root.autoUrgent)
     /// Background of the selected element: `@selected-normal-background`.
-    property color selected: "#37adaa"
+    readonly property color selected: root.pick(Settings.colors.selection, root.autoSelected)
     /// Border drawn around a thumbnail: `@border-color`, which pywal aliases to
     /// `@background`, so it reads as a thin gap rather than as a visible frame.
-    property color borderColor: "#f5f5f5"
+    readonly property color borderColor: root.pick(Settings.colors.thumbBorder, root.autoBorderColor)
+
+    /// The palette as read, ignoring the overrides — the panel shows these under
+    /// each colour that is still on `auto`.
+    function autoValue(name: string): color {
+        switch (name) {
+        case "background":
+            return root.autoBackground;
+        case "foreground":
+            return root.autoForeground;
+        case "border":
+            return root.autoUrgent;
+        case "selection":
+            return root.autoSelected;
+        case "thumbBorder":
+            return root.autoBorderColor;
+        }
+        return root.autoForeground;
+    }
 
     /// Palette written by matugen. Loaded first, so pywal wins on shared keys —
     /// the same precedence the two `@import` lines give inside rofi.
@@ -90,11 +124,11 @@ Singleton {
                 root[target] = value;
         };
 
-        apply("background", "background");
-        apply("foreground", "foreground");
-        apply("urgent-background", "urgent");
-        apply("selected-normal-background", "selected");
-        apply("border-color", "borderColor");
+        apply("background", "autoBackground");
+        apply("foreground", "autoForeground");
+        apply("urgent-background", "autoUrgent");
+        apply("selected-normal-background", "autoSelected");
+        apply("border-color", "autoBorderColor");
     }
 
     Component.onCompleted: root.reload()

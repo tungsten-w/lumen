@@ -28,7 +28,9 @@ fn home_dir() -> PathBuf {
 }
 
 fn parallelism() -> usize {
-    thread::available_parallelism().map(|n| n.get()).unwrap_or(4)
+    thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4)
 }
 
 fn is_image(path: &Path) -> bool {
@@ -51,7 +53,11 @@ fn find_images(dir: &Path, exclude: &Path) -> Vec<PathBuf> {
             // extra stat syscall the way `path.is_dir()` does. It does not follow
             // symlinks, so those fall back to the stat-ing check.
             let Ok(ft) = entry.file_type() else { continue };
-            let is_dir = if ft.is_symlink() { path.is_dir() } else { ft.is_dir() };
+            let is_dir = if ft.is_symlink() {
+                path.is_dir()
+            } else {
+                ft.is_dir()
+            };
             if is_dir {
                 result.extend(find_images(&path, exclude));
             } else if is_image(&path) {
@@ -150,7 +156,9 @@ fn generate_thumbnails(pairs: &[(&PathBuf, PathBuf)]) {
             scope.spawn(|| {
                 loop {
                     let index = next.fetch_add(1, Ordering::Relaxed);
-                    let Some((img, thumb)) = todo.get(index) else { break };
+                    let Some((img, thumb)) = todo.get(index) else {
+                        break;
+                    };
                     let _ = Command::new("magick")
                         .env("MAGICK_THREAD_LIMIT", "1")
                         .arg(format!("{}[0]", img.display()))
@@ -170,19 +178,16 @@ fn generate_thumbnails(pairs: &[(&PathBuf, PathBuf)]) {
 /// Every wallpaper of `dir`, paired with its thumbnail and ready to display.
 ///
 /// Both front-ends need the same list, so the scan, the sort and the thumbnail
-/// refresh all happen here.
+/// refresh all happen here. An empty directory gives an empty list: the pickers
+/// treat that as an error, but `--settings` is happy to show an empty grid.
 fn wallpaper_entries(dir: &Path) -> Vec<(PathBuf, PathBuf)> {
     let thumb_dir = dir.join(".thumbnails");
     if fs::create_dir_all(&thumb_dir).is_err() {
         eprintln!("Erreur : impossible de créer {}.", thumb_dir.display());
-        std::process::exit(1);
+        return Vec::new();
     }
 
     let mut images = find_images(dir, &thumb_dir);
-    if images.is_empty() {
-        eprintln!("Erreur : Aucune image dans {}.", dir.display());
-        std::process::exit(1);
-    }
     images.sort();
 
     let pairs: Vec<(&PathBuf, PathBuf)> = images
@@ -201,14 +206,41 @@ fn wallpaper_entries(dir: &Path) -> Vec<(PathBuf, PathBuf)> {
         .collect()
 }
 
+/// The wallpaper list as the Quickshell front-end reads it.
+fn items_json(entries: &[(PathBuf, PathBuf)]) -> String {
+    let items: Vec<serde_json::Value> = entries
+        .iter()
+        .filter_map(|(img, thumb)| {
+            Some(serde_json::json!({
+                "name": img.file_name()?.to_string_lossy(),
+                "path": img.to_string_lossy(),
+                "thumb": thumb.to_string_lossy(),
+            }))
+        })
+        .collect();
+    serde_json::json!({ "items": items }).to_string()
+}
+
+/// Both pickers stop here rather than opening on nothing.
+fn require_entries(dir: &Path) -> Vec<(PathBuf, PathBuf)> {
+    let entries = wallpaper_entries(dir);
+    if entries.is_empty() {
+        eprintln!("Erreur : Aucune image dans {}.", dir.display());
+        std::process::exit(1);
+    }
+    entries
+}
+
 /// apply a (dark/light) wallpaper with rofi picker
 fn pick_with_rofi(dir: &Path) -> Option<PathBuf> {
-    let entries = wallpaper_entries(dir);
+    let entries = require_entries(dir);
 
     // rofi selection
     let mut input = String::with_capacity(entries.len() * 128);
     for (img, thumb) in &entries {
-        let Some(file_name) = img.file_name() else { continue };
+        let Some(file_name) = img.file_name() else {
+            continue;
+        };
         input.push_str(&file_name.to_string_lossy());
         input.push_str("\0icon\x1f");
         input.push_str(&thumb.to_string_lossy());
@@ -243,19 +275,7 @@ fn pick_with_rofi(dir: &Path) -> Option<PathBuf> {
 
 /// apply a (dark/light) wallpaper with the Quickshell picker
 fn pick_with_quickshell(config: &Path, dir: &Path) -> Option<PathBuf> {
-    let entries = wallpaper_entries(dir);
-
-    let items: Vec<serde_json::Value> = entries
-        .iter()
-        .filter_map(|(img, thumb)| {
-            Some(serde_json::json!({
-                "name": img.file_name()?.to_string_lossy(),
-                "path": img.to_string_lossy(),
-                "thumb": thumb.to_string_lossy(),
-            }))
-        })
-        .collect();
-    let list = serde_json::json!({ "items": items }).to_string();
+    let list = items_json(&require_entries(dir));
 
     let selected = run_quickshell(config, "picker", Some(&list))?;
     if selected.is_empty() {
@@ -383,7 +403,11 @@ fn apply_all(wallpaper: &Path, dark: bool) {
         let wal_flags: Vec<String> = wal_flags.into_iter().map(String::from).collect();
         handles.push(thread::spawn(move || {
             thread::sleep(TRANSITION_GUARD); // stay off the CPU while awww animates
-            let status = Command::new("wal").arg("-i").arg(&wallpaper).args(&wal_flags).status();
+            let status = Command::new("wal")
+                .arg("-i")
+                .arg(&wallpaper)
+                .args(&wal_flags)
+                .status();
             if !status.map(|s| s.success()).unwrap_or(false) {
                 eprintln!("Erreur pywal.");
             }
@@ -439,7 +463,7 @@ fn apply_all(wallpaper: &Path, dark: bool) {
 
             if is_running("spotify") {
                 thread::sleep(Duration::from_secs(2));
-                let _ = Command::new("spicetify").arg("restart").status();
+                let _ = Command::new("spicetify").arg("reload").status();
             }
         }));
     }
@@ -455,7 +479,8 @@ fn apply_all(wallpaper: &Path, dark: bool) {
         let obs_theme = obs_theme.to_string();
         handles.push(thread::spawn(move || {
             let vault_app = home_dir().join("Documents/Obsidian Vault/.obsidian/app.json");
-            let vault_appear = home_dir().join("Documents/Obsidian Vault/.obsidian/appearance.json");
+            let vault_appear =
+                home_dir().join("Documents/Obsidian Vault/.obsidian/appearance.json");
             update_json_field(&vault_app, "baseTheme", &obs_base);
             update_json_field(&vault_appear, "theme", &obs_theme);
 
@@ -550,9 +575,8 @@ impl Frontend {
 }
 
 fn has_command(name: &str) -> bool {
-    std::env::var_os("PATH").is_some_and(|path| {
-        std::env::split_paths(&path).any(|dir| dir.join(name).is_file())
-    })
+    std::env::var_os("PATH")
+        .is_some_and(|path| std::env::split_paths(&path).any(|dir| dir.join(name).is_file()))
 }
 
 /// A scratch file to talk to the Quickshell process with. XDG_RUNTIME_DIR is a
@@ -593,7 +617,10 @@ fn run_quickshell(config: &Path, mode: &str, items: Option<&str>) -> Option<Stri
     }
     let status = command.status();
 
-    let answer = fs::read_to_string(&result).unwrap_or_default().trim().to_string();
+    let answer = fs::read_to_string(&result)
+        .unwrap_or_default()
+        .trim()
+        .to_string();
     let _ = fs::remove_file(&result);
     if let Some(path) = items_file {
         let _ = fs::remove_file(path);
@@ -630,9 +657,39 @@ fn choose_mode(frontend: &Frontend) -> Option<Mode> {
         .expect("stdin manquant")
         .write_all(menu.as_bytes())
         .expect("échec de l'écriture dans rofi");
-    let output = child.wait_with_output().expect("échec de l'exécution de rofi");
+    let output = child
+        .wait_with_output()
+        .expect("échec de l'exécution de rofi");
 
     Mode::parse(String::from_utf8_lossy(&output.stdout).trim())
+}
+
+/// `lumen --settings` — the settings panel, with the picker beside it as a live
+/// preview of what every value does.
+///
+/// Nothing can be picked from that preview, so opening the settings can never
+/// change the wallpaper by accident; the panel writes to
+/// `~/.config/lumen/settings.json` as you move a slider, and both prompts read
+/// it from then on. The same panel opens over a real picker with Ctrl+,.
+fn open_settings(frontend: &Frontend) {
+    let Frontend::Quickshell(config) = frontend else {
+        eprintln!(
+            "Erreur : les réglages sont dessinés par Quickshell, et `qs` ou sa config manque."
+        );
+        eprintln!("Voir « The picker » dans le README pour l'installer.");
+        std::process::exit(1);
+    };
+
+    // The panel has nowhere to write if this is a fresh install.
+    let _ = fs::create_dir_all(home_dir().join(".config/lumen"));
+
+    let list = items_json(&wallpaper_entries(
+        &home_dir().join("Pictures/Wallpapers/dark"),
+    ));
+    if run_quickshell(config, "settings", Some(&list)).is_none() {
+        eprintln!("Erreur : Quickshell n'a pas démarré.");
+        std::process::exit(1);
+    }
 }
 
 /// Shows the thumbnail grid for `dir` and waits for a wallpaper.
@@ -696,8 +753,37 @@ fn warm_thumbnails(dir: &Path) {
     );
 }
 
+const USAGE: &str = "\
+lumen — one wallpaper, and the whole desktop follows.
+
+Usage:
+  lumen                  the menu: dark, light, time of day, season
+  lumen --settings       the picker's settings: shape, motion, layout, color
+  lumen --thumbs [DIR…]  rebuild the thumbnails without showing anything
+  lumen --help           this
+
+The settings also open from inside the picker, with Ctrl+, or by typing
+`settings` into its search field.";
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().is_some_and(|a| a == "--help" || a == "-h") {
+        println!("{USAGE}");
+        return;
+    }
+    if args.first().is_some_and(|a| a == "--settings") {
+        open_settings(&Frontend::detect());
+        return;
+    }
+    // An unknown flag is a typo, not a wallpaper directory: say so rather than
+    // opening the menu as if nothing had been asked for.
+    if args
+        .first()
+        .is_some_and(|a| a.starts_with('-') && a != "--thumbs")
+    {
+        eprintln!("Unknown option: {}\n\n{USAGE}", args[0]);
+        std::process::exit(2);
+    }
     if args.first().is_some_and(|a| a == "--thumbs") {
         let dirs: Vec<PathBuf> = if args.len() > 1 {
             args[1..].iter().map(PathBuf::from).collect()
@@ -722,20 +808,26 @@ fn main() {
     match choose_mode(&frontend) {
         // Dark — thumbnail picker
         Some(Mode::Dark) => {
-            if let Some(wp) = pick_wallpaper(&frontend, &home_dir().join("Pictures/Wallpapers/dark")) {
+            if let Some(wp) =
+                pick_wallpaper(&frontend, &home_dir().join("Pictures/Wallpapers/dark"))
+            {
                 apply_all(&wp, true);
             }
         }
         // Light — thumbnail picker
         Some(Mode::Light) => {
-            if let Some(wp) = pick_wallpaper(&frontend, &home_dir().join("Pictures/Wallpapers/light")) {
+            if let Some(wp) =
+                pick_wallpaper(&frontend, &home_dir().join("Pictures/Wallpapers/light"))
+            {
                 apply_all(&wp, false);
             }
         }
         // Heure — random, dark if night/sunset
         Some(Mode::Heure) => {
             let moment = get_moment_journee();
-            if let Some(wp) = pick_random(&home_dir().join(format!("Pictures/Wallpapers/season-time/{moment}"))) {
+            if let Some(wp) =
+                pick_random(&home_dir().join(format!("Pictures/Wallpapers/season-time/{moment}")))
+            {
                 let dark = moment == "night" || moment == "sunset";
                 apply_all(&wp, dark);
             }
@@ -743,7 +835,9 @@ fn main() {
         // Saison — random, light
         Some(Mode::Saison) => {
             let saison = get_saison();
-            if let Some(wp) = pick_random(&home_dir().join(format!("Pictures/Wallpapers/season-time/{saison}"))) {
+            if let Some(wp) =
+                pick_random(&home_dir().join(format!("Pictures/Wallpapers/season-time/{saison}")))
+            {
                 apply_all(&wp, false);
             }
         }

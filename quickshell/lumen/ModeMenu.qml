@@ -54,9 +54,31 @@ OverlayWindow {
         Result.accept(win.entries[win.currentIndex].id);
     }
 
+    /// The settings panel opens from here too, on the same Ctrl+, as the picker.
+    asideWidth: 470
+
+    aside: SettingsPanel {
+        id: settings
+
+        anchors.fill: parent
+        onClosed: win.asideOpen = false
+    }
+
     // Nothing is typed here, so the vim keys need no mode: `hjkl` move, `q`
     // quits. The picker that comes next spells them the same way.
     onKeyPressed: event => {
+        if (event.key === Qt.Key_Comma && (event.modifiers & Qt.ControlModifier) !== 0) {
+            win.asideOpen = !win.asideOpen;
+            event.accepted = true;
+            return;
+        }
+
+        // While the panel is out, the keys belong to it.
+        if (win.asideOpen) {
+            event.accepted = settings.handleKey(event);
+            return;
+        }
+
         switch (event.key) {
         case Qt.Key_Escape:
         case Qt.Key_Q:
@@ -110,8 +132,8 @@ OverlayWindow {
         /// and read as a single capsule. It also clips the second row while it
         /// slides in.
         ClippingRectangle {
-            x: Style.menu.inset
-            y: Style.menu.inset
+            x: Style.menu.insetX
+            y: Style.menu.insetY
             width: Style.menu.barWidth
             height: Style.menu.barHeight
             radius: height / 2
@@ -147,8 +169,8 @@ OverlayWindow {
                     Behavior on x {
                         NumberAnimation {
                             duration: Style.moveDuration
-                            easing.type: Easing.OutBack
-                            easing.overshoot: 1.05
+                            easing.type: Style.springEasing
+                            easing.overshoot: Style.overshoot(0.05)
                         }
                     }
                     Behavior on y {
@@ -198,13 +220,13 @@ OverlayWindow {
 
                             // A nudge as the selection lands on the entry, and a
                             // smaller one while the pointer is over it.
-                            scale: cell.current ? 1.08 : (hover.hovered ? 1.04 : 1)
+                            scale: cell.current ? Style.liftBy(6.7) : (hover.hovered ? Style.liftBy(3.3) : 1)
 
                             Behavior on scale {
                                 NumberAnimation {
                                     duration: Style.fadeDuration
-                                    easing.type: Easing.OutBack
-                                    easing.overshoot: 2
+                                    easing.type: Style.springEasing
+                                    easing.overshoot: Style.overshoot(1)
                                 }
                             }
                         }

@@ -132,6 +132,13 @@ the recommended keybind is `W` (mod + W)
 bind = $mainMod, W, exec, /usr/local/bin/lumen
 ```
 
+Make sure the binary is on your `PATH` — the keybind can call it by its full
+path, but `lumen --settings` and `lumen --help` need the name to resolve:
+
+```bash
+ln -s "$PWD/target/release/lumen" ~/.local/bin/lumen   # or install it in /usr/local/bin
+```
+
 ### Then — the picker
 
 ```bash
@@ -147,10 +154,12 @@ config there too.
 ##  The picker
 
 The menu and the thumbnail grid are drawn by [Quickshell](https://quickshell.org)
-(`quickshell/lumen/`). They are a pixel-for-pixel copy of the old rofi themes —
-same sizes, same colors, same rounded frames — with the movement rofi could not
-do: the window springs open, the selection slides from one wallpaper to the next,
-the grid rearranges itself as you type, and thumbnails fade in as they decode.
+(`quickshell/lumen/`). Out of the box they are a pixel-for-pixel copy of the old
+rofi themes — same sizes, same colors, same rounded frames — with the movement
+rofi could not do: the window springs open, the selection slides from one
+wallpaper to the next, the grid rearranges itself as you type, and thumbnails
+fade in as they decode. Every one of those numbers is then yours to change from
+the settings panel below.
 
 Colors are not duplicated anywhere: the QML reads the very same
 `~/.config/rofi/colors.rasi` and `~/.cache/wal/colors-rofi-dark.rasi` the rasi
@@ -187,6 +196,72 @@ switch if you do not want to: arrows, <kbd>Enter</kbd>, <kbd>Home</kbd>/<kbd>End
 (rofi's own <kbd>Ctrl</kbd>+<kbd>j</kbd> / <kbd>Ctrl</kbd>+<kbd>k</kbd>, extended).
 Clicking outside cancels. The mode menu takes `hjkl`, arrows, <kbd>Enter</kbd> and
 <kbd>q</kbd> — it has nothing to type into, so it needs no modes.
+
+### Settings
+
+Three ways into the same panel, whichever is closest to hand:
+
+```bash
+lumen --settings            # from a terminal, with the picker beside it as a preview
+```
+
+- <kbd>Ctrl</kbd>+<kbd>,</kbd> from inside the picker or the mode menu;
+- or type **`settings` into the picker's search field**. The grid tells you it is
+  a command as you type it, and the field clears itself once the panel is out.
+
+Everything the panel changes is redrawn **live on the window right next to it**.
+It is split into four tabs, so each list is short enough to see nearly whole:
+
+| Tab | What is in it |
+|---|---|
+| **Shape** | Corner radii (windows, header, thumbnails, search field), border widths, the mode menu's pill and ring |
+| **Motion** | Animations on/off, speed, bounce, selection lift, and each duration on its own |
+| **Layout** | Columns and spacing, thumbnail aspect / zoom / padding, **wallpaper backdrop zoom, framing, blur and dim**, window and header sizes, search field, mode menu |
+| **Color** | Background opacity, and the five palette colors |
+
+| Panel | |
+|---|---|
+| <kbd>Tab</kbd> / <kbd>1</kbd>…<kbd>4</kbd> | Move between tabs |
+| <kbd>j</kbd> / <kbd>k</kbd> | Move through the settings |
+| <kbd>h</kbd> / <kbd>l</kbd> | Change the value (<kbd>Shift</kbd> for ten times the step) |
+| <kbd>Enter</kbd> | Flip a switch, or pin a color |
+| <kbd>r</kbd> | Reset the tab you are in |
+| <kbd>Esc</kbd> / <kbd>q</kbd> | Close the panel |
+
+Values are written to `~/.config/lumen/settings.json` as you move a slider —
+there is no save button, and the file is hand-editable and watched, so writing to
+it from an editor restyles an open picker. The last row of each tab, or
+<kbd>r</kbd>, puts that tab back to the rofi measurements.
+
+Two of those deserve a word. **Thumbnails → Zoom** is how far into each
+thumbnail the grid crops — rofi fitted the image in a 340px box and clipped it,
+and that is the number.
+
+**Wallpaper backdrop** is the big image across the header, and behind the mode
+menu. rofi drew it at exactly the window's width, pinned to the top, with nothing
+else on offer:
+
+- **Zoom** — above 1× it crops left and right rather than squeezing.
+- **Framing** — which band of it the header shows, 0 being the top rofi used.
+- **Blur** and **Dim** — the frosted-glass version, with the search field
+  floating on it. Both are 0 by default, and at 0 the whole effect is skipped
+  rather than drawn as a no-op.
+
+For the desktop *behind* the window to be blurred too, Hyprland can do it: the
+two surfaces are named, so
+
+```ini
+# ~/.config/hypr/hyprland.conf
+layerrule = blur, lumen-picker
+layerrule = blur, lumen-menu
+```
+
+and lowering **Color → Background opacity** lets it through.
+
+Colors start on `auto`, which means "whatever pywal and matugen made of the
+current wallpaper". Pressing <kbd>Enter</kbd> on one pins it to what is on screen
+right now and opens hue, saturation and lightness under it; pressing
+<kbd>Enter</kbd> again hands it back to the wallpaper.
 
 **rofi is still there.** `lumen` falls back to the old themes whenever `qs` or
 the Quickshell config is missing — or if `qs` fails to start — so nothing breaks
@@ -241,6 +316,7 @@ Part of my dotfiles: [tungsten-w/.config](https://github.com/tungsten-w/.config)
 - [ ] Config file for custom paths (drop the hard-coded `~/Pictures/Wallpapers`)
 - [ ] Proper `install.sh` <--- (im working on it ( ˘͈ ᵕ ˘͈♡))
 - [ ] Transitions
+- [x] Settings panel (Ctrl+, / `lumen --settings`)
 - [x] use rust instead of bash
 - [x] Quickshell
 ---

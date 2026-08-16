@@ -33,6 +33,10 @@ Singleton {
             return;
         root.answered = true;
 
+        // A slider moved in the last frame has not reached the settings file
+        // yet; the write is deferred, and we are about to exit.
+        Settings.flush();
+
         if (file.path !== "")
             file.setText(value);
 
