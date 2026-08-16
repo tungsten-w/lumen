@@ -316,6 +316,41 @@ fn update_json_field(path: &Path, key: &str, value: &str) {
     }
 }
 
+/// Name of the spicetify theme in use, out of `config-xpui.ini`.
+fn spicetify_theme(config: &str) -> Option<String> {
+    config.lines().find_map(|line| {
+        let (key, value) = line.split_once('=')?;
+        (key.trim() == "current_theme").then(|| value.trim().to_string())
+    })
+}
+
+/// The file holding the colours Spotify is themed with.
+fn spicetify_colors() -> Option<PathBuf> {
+    let config = fs::read_to_string(home_dir().join(".config/spicetify/config-xpui.ini")).ok()?;
+    let theme = spicetify_theme(&config)?;
+    let colors = home_dir().join(format!(".config/spicetify/Themes/{theme}/color.ini"));
+    colors.is_file().then_some(colors)
+}
+
+/// Blocks until `path` has been written since `since`, and says whether it was.
+fn wait_for_write(path: &Path, since: SystemTime, timeout: Duration) -> bool {
+    let deadline = std::time::Instant::now() + timeout;
+    while std::time::Instant::now() < deadline {
+        let written = path
+            .metadata()
+            .and_then(|meta| meta.modified())
+            .map(|modified| modified > since)
+            .unwrap_or(false);
+        if written {
+            // The write we just saw start may still be in flight.
+            thread::sleep(Duration::from_millis(200));
+            return true;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    false
+}
+
 /// `pgrep -x` without the fork: walks /proc and compares against comm, which is
 /// the same truncated-to-15-bytes name pgrep itself matches on.
 fn is_running(process_name: &str) -> bool {
@@ -341,6 +376,8 @@ fn is_running(process_name: &str) -> bool {
 
 /// apply all (awww, pywal, hyprpanel, obsidian...)
 fn apply_all(wallpaper: &Path, dark: bool) {
+    // Everything the theming tools write from here on is newer than this.
+    let started = SystemTime::now();
     let wal_flags: Vec<&str> = if dark { vec!["-q"] } else { vec!["-l", "-q"] };
     let matugen_mode = if dark { "dark" } else { "light" };
     let (obs_base, obs_theme, relaunch_obs) = if dark {
@@ -462,7 +499,20 @@ fn apply_all(wallpaper: &Path, dark: bool) {
                 .status();
 
             if is_running("spotify") {
-                thread::sleep(Duration::from_secs(2));
+                // Spotify's colours are not ours to write: Noctalia's own
+                // spicetify template writes them, and it does so a good while
+                // after `wallpaper-set` has returned — measured at three seconds
+                // against a reload that used to fire at two. Reloading early
+                // hands Spotify the palette of the *previous* wallpaper, which
+                // looks exactly like the command never ran.
+                //
+                // So we wait for the file itself rather than for a duration.
+                match spicetify_colors() {
+                    Some(colors) => {
+                        wait_for_write(&colors, started, Duration::from_secs(15));
+                    }
+                    None => thread::sleep(Duration::from_secs(3)),
+                }
                 let _ = Command::new("spicetify").arg("reload").status();
             }
         }));
@@ -880,6 +930,48 @@ mod tests {
         for h in 22..24 {
             assert_eq!(moment_for_hour(h), "night");
         }
+    }
+
+    #[test]
+    fn spicetify_theme_is_read_from_the_ini() {
+        let config = "\
+[Setting]
+spotify_path          = /opt/spotify
+current_theme          = Comfy
+color_scheme           = Comfy
+";
+        assert_eq!(spicetify_theme(config).as_deref(), Some("Comfy"));
+        // A file without the key, or an empty one, must not guess a theme.
+        assert_eq!(spicetify_theme("color_scheme = Comfy"), None);
+        assert_eq!(spicetify_theme(""), None);
+    }
+
+    #[test]
+    fn wait_for_write_sees_a_write_and_gives_up_without_one() {
+        let dir = std::env::temp_dir().join(format!("lumen_wait_{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("color.ini");
+        fs::write(&file, b"old").unwrap();
+
+        // Nothing writes it: we wait, and say so.
+        let since = SystemTime::now();
+        assert!(!wait_for_write(&file, since, Duration::from_millis(300)));
+
+        // Written while we wait: picked up.
+        let writer = {
+            let file = file.clone();
+            thread::spawn(move || {
+                thread::sleep(Duration::from_millis(150));
+                fs::write(&file, b"new").unwrap();
+            })
+        };
+        assert!(wait_for_write(&file, since, Duration::from_secs(5)));
+        writer.join().unwrap();
+
+        // A file that is not there at all is not worth waiting for forever.
+        assert!(!wait_for_write(&dir.join("gone.ini"), since, Duration::from_millis(200)));
+
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
