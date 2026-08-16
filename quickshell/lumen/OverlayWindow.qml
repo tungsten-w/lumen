@@ -20,6 +20,23 @@ PanelWindow {
     /// Anything declared inside the window lands on the card.
     default property alias content: card.data
 
+    /// A second card, to the right of the first one. It is where the settings
+    /// panel goes: same window, so the panel and whatever it is restyling share
+    /// one keyboard focus and one closing animation.
+    property alias aside: aside.data
+    property real asideWidth: 0
+    property bool asideOpen: false
+    /// As tall as the card it sits next to, but never so short that the panel
+    /// has no room — the mode menu is only 160px high.
+    property real asideHeight: Math.max(win.cardHeight, 640)
+
+    /// The pair slides apart to make room rather than the panel covering the
+    /// card, so nothing you are adjusting is ever hidden behind the sliders.
+    readonly property real asideShift: win.asideOpen ? (win.asideWidth + 18) / 2 : 0
+
+    /// Set once a choice has been made, so the panel leaves with the card.
+    property bool closing: false
+
     /// Keys that reached the card, either because nothing else was focused or
     /// because the focused item ignored them. `Keys` only attaches to items, so
     /// the card forwards them here.
@@ -57,9 +74,17 @@ PanelWindow {
         id: card
 
         anchors.centerIn: parent
+        anchors.horizontalCenterOffset: -win.asideShift
         width: win.cardWidth
         height: win.cardHeight
         focus: true
+
+        Behavior on anchors.horizontalCenterOffset {
+            NumberAnimation {
+                duration: Style.moveDuration
+                easing.type: Easing.OutCubic
+            }
+        }
 
         Keys.onPressed: event => win.keyPressed(event)
 
@@ -89,8 +114,8 @@ PanelWindow {
             id: riseIn
             to: 1
             duration: Style.enterDuration
-            easing.type: Easing.OutBack
-            easing.overshoot: 1.1
+            easing.type: Style.springEasing
+            easing.overshoot: Style.overshoot(0.1)
         }
 
         ParallelAnimation {
@@ -119,6 +144,43 @@ PanelWindow {
                 fadeIn.stop();
                 riseIn.stop();
                 closeAnimation.start();
+                win.closing = true;
+            }
+        }
+    }
+
+    /// The settings panel. Mirrors the card: same height, same entrance, and it
+    /// slides out from underneath it rather than appearing beside it.
+    Item {
+        id: aside
+
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.horizontalCenterOffset: win.asideOpen ? win.cardWidth / 2 + 18 - win.asideShift + win.asideWidth / 2 : 0
+        width: win.asideWidth
+        height: win.asideHeight
+        visible: opacity > 0
+        opacity: win.asideOpen && !win.closing ? 1 : 0
+        scale: win.asideOpen && !win.closing ? 1 : 0.94
+        transformOrigin: Item.Center
+
+        Behavior on anchors.horizontalCenterOffset {
+            NumberAnimation {
+                duration: Style.moveDuration
+                easing.type: Easing.OutCubic
+            }
+        }
+        Behavior on opacity {
+            NumberAnimation {
+                duration: Style.moveDuration
+                easing.type: Easing.OutCubic
+            }
+        }
+        Behavior on scale {
+            NumberAnimation {
+                duration: Style.moveDuration
+                easing.type: Style.springEasing
+                easing.overshoot: Style.overshoot(0.1)
             }
         }
     }

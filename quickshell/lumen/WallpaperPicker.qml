@@ -20,14 +20,36 @@ OverlayWindow {
     // The window opens ready to be typed into.
     initialFocus: search
 
+    /// Opened with Ctrl+, and by `lumen --settings`. It is a panel of this
+    /// window rather than a window of its own, so it shares the keyboard and
+    /// every change it makes is drawn on the grid next to it immediately.
+    asideWidth: 470
+
+    /// True when the picker is only there to show what the settings do; Enter
+    /// and clicks pick nothing, so `lumen --settings` cannot change a wallpaper
+    /// by accident. Set by shell.qml for the settings mode.
+    property bool preview: false
+
+    aside: SettingsPanel {
+        id: settings
+
+        anchors.fill: parent
+        // Closing the panel normally hands the keyboard back to the grid. In
+        // preview mode there is no grid to hand it back to — nothing can be
+        // picked there — so the window goes with it.
+        onClosed: {
+            if (win.preview)
+                Result.cancel();
+            else
+                win.asideOpen = false;
+        }
+    }
+
     /// Every wallpaper in the directory: `{ name, path, thumb }`.
     property var wallpapers: []
     /// The ones the search field currently keeps.
     property var matches: []
     property int currentIndex: 0
-
-    readonly property real columnPitch: Style.picker.elementWidth + Style.picker.columnSpacing
-    readonly property real rowPitch: Style.picker.elementHeight + Style.picker.rowSpacing
 
     /// True only while the grid is first filling in. Thumbnails that show up
     /// later — because they were scrolled to, or because the search changed —
@@ -54,9 +76,39 @@ OverlayWindow {
         }
     }
 
+    /// Typed into the search field instead of a wallpaper name, this opens the
+    /// settings — the same panel Ctrl+, and `lumen --settings` open.
+    ///
+    /// It is safe to spend the word: no wallpaper here is called anything like
+    /// it, and a search that did match one would still be one keystroke away
+    /// from being something else.
+    readonly property var commands: ["settings"]
+
+    /// Runs `query` if it is one of them, and says whether it did. Anything a
+    /// command starts with counts as being on the way to it, which is what the
+    /// hint over the grid reacts to.
+    function isCommandPrefix(query: string): bool {
+        const typed = query.trim().toLowerCase();
+        return typed.length > 0 && win.commands.some(command => command.startsWith(typed));
+    }
+
+    function runCommand(query: string): bool {
+        if (!win.commands.includes(query.trim().toLowerCase()))
+            return false;
+
+        // Clearing the field re-enters filter(), which is harmless: an empty
+        // query is no longer a command.
+        search.text = "";
+        win.asideOpen = true;
+        return true;
+    }
+
     /// rofi's default matcher: every whitespace-separated term has to appear
     /// somewhere in the entry, case-insensitively.
     function filter(query: string) {
+        if (win.runCommand(query))
+            return;
+
         const terms = query.toLowerCase().split(/\s+/).filter(term => term.length > 0);
         win.matches = terms.length === 0 ? win.wallpapers : win.wallpapers.filter(wallpaper => {
             const name = wallpaper.name.toLowerCase();
@@ -78,9 +130,17 @@ OverlayWindow {
     }
 
     function activate() {
+        if (win.preview)
+            return;
         const wallpaper = win.matches[win.currentIndex];
         if (wallpaper)
             Result.accept(wallpaper.path);
+    }
+
+    /// Ctrl+, — the shortcut editors use, and the one key that always means the
+    /// same thing whichever half of the window has the cursor.
+    function isSettingsKey(event): bool {
+        return event.key === Qt.Key_Comma && (event.modifiers & Qt.ControlModifier) !== 0;
     }
 
     // ── Keys ───────────────────────────────────────────────────────────
@@ -177,6 +237,44 @@ OverlayWindow {
             }
             break;
         }
+        return false;
+    }
+
+    /// Where a keystroke goes. Kept as a function rather than inline in the
+    /// handler so that it is one thing to read — and so it can be exercised
+    /// without a keyboard.
+    ///
+    /// Returns whether the key was used up; anything else falls through to the
+    /// search field as text.
+    function routeKey(event): bool {
+        if (win.isSettingsKey(event)) {
+            win.asideOpen = !win.asideOpen;
+            return true;
+        }
+
+        // While the panel is out it owns the keyboard, so that h and l adjust
+        // the setting under the cursor instead of walking the grid. Esc gives
+        // the keyboard back. Whatever it does not use is swallowed all the same:
+        // a letter typed over a slider must not land in the search field behind.
+        if (win.asideOpen) {
+            settings.handleKey(event);
+            return true;
+        }
+
+        if (win.sharedKey(event))
+            return true;
+
+        if (!win.inserting)
+            return win.normalKey(event);
+
+        // Esc leaves insert mode without dropping the query, so you can filter,
+        // step out, and walk what is left. From normal mode a second Esc closes
+        // the picker.
+        if (event.key === Qt.Key_Escape) {
+            win.inserting = false;
+            return true;
+        }
+
         return false;
     }
 
@@ -313,7 +411,8 @@ OverlayWindow {
                         // to do its own.
                         SequentialAnimation on blink {
                             loops: Animation.Infinite
-                            running: win.inserting
+                            // Stops with everything else when animations are off.
+                            running: win.inserting && Style.speed > 0
 
                             PauseAnimation {
                                 duration: 600
@@ -336,29 +435,7 @@ OverlayWindow {
                     // TextInput would otherwise eat the arrow keys to move its
                     // cursor. The field is a filter, not somewhere you edit
                     // prose, so the grid gets the arrows.
-                    Keys.onPressed: event => {
-                        if (win.sharedKey(event)) {
-                            event.accepted = true;
-                            return;
-                        }
-
-                        if (!win.inserting) {
-                            win.normalKey(event);
-                            event.accepted = true;
-                            return;
-                        }
-
-                        // Esc leaves insert mode without dropping the query, so
-                        // you can filter, step out, and walk what is left. From
-                        // normal mode a second Esc closes the picker.
-                        if (event.key === Qt.Key_Escape) {
-                            win.inserting = false;
-                            event.accepted = true;
-                            return;
-                        }
-
-                        // Anything else is text for the field.
-                    }
+                    Keys.onPressed: event => event.accepted = win.routeKey(event)
 
                     /// `placeholder: " Wallpapers";`
                     Text {
@@ -378,20 +455,57 @@ OverlayWindow {
             }
         }
 
+        /// What the grid area says while a command is being typed into the
+        /// search field. Without it, typing `settings` looks like a search that
+        /// matches nothing right up until it fires.
+        Item {
+            x: Style.picker.gridX
+            y: Style.picker.gridY + 24
+            width: Style.picker.columns * Style.picker.columnPitch
+            height: Style.textSize * 2
+            opacity: win.isCommandPrefix(search.text) ? 1 : 0
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: Style.fadeDuration
+                }
+            }
+
+            Row {
+                anchors.centerIn: parent
+                spacing: 10
+
+                SvgIcon {
+                    anchors.verticalCenter: parent.verticalCenter
+                    name: "enter"
+                    color: Colors.selected
+                    size: Style.textSize * 1.4
+                }
+
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "settings"
+                    color: Colors.selected
+                    font.family: Style.textFont
+                    font.pixelSize: Style.textSize * 1.1
+                }
+            }
+        }
+
         /// `listview { columns: 3; spacing: 10px; }`
         GridView {
             id: grid
 
             x: Style.picker.gridX
             y: Style.picker.gridY
-            width: Style.picker.columns * win.columnPitch
+            width: Style.picker.columns * Style.picker.columnPitch
             // Runs to the window padding and is cut mid-row there, exactly like
             // rofi's fixed-height listview.
             height: Style.picker.height - Style.picker.gridY - Style.picker.border - 15
             clip: true
 
-            cellWidth: win.columnPitch
-            cellHeight: win.rowPitch
+            cellWidth: Style.picker.columnPitch
+            cellHeight: Style.picker.rowPitch
 
             // contentY is animated through a Behavior, which only works if the
             // view is not also flicking itself; the wheel is handled below.
@@ -474,7 +588,7 @@ OverlayWindow {
                 // The whole element scales, thumbnail and selection frame
                 // together, so the frame keeps the thickness rofi gives it.
                 transformOrigin: Item.Center
-                scale: element.current ? 1.012 : 1
+                scale: element.current ? Style.lift : 1
                 Behavior on scale {
                     NumberAnimation {
                         duration: Style.fadeDuration
@@ -499,8 +613,8 @@ OverlayWindow {
                     Behavior on scale {
                         NumberAnimation {
                             duration: Style.fadeDuration
-                            easing.type: Easing.OutBack
-                            easing.overshoot: 1.6
+                            easing.type: Style.springEasing
+                            easing.overshoot: Style.overshoot(0.6)
                         }
                     }
                 }
@@ -565,7 +679,11 @@ OverlayWindow {
                     id: entrance
 
                     PauseAnimation {
-                        duration: win.staggering ? Math.min(Style.staggerCap, element.index * Style.stagger) : 0
+                        // Clamped: an animation is handed this straight, and a
+                        // duration that came out negative — or NaN, from a
+                        // half-written settings file — makes Qt complain on
+                        // every delegate rather than fall back.
+                        duration: Math.max(0, win.staggering ? Math.min(Style.staggerCap, element.index * Style.stagger) : 0)
                     }
                     NumberAnimation {
                         target: element
