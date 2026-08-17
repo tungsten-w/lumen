@@ -682,6 +682,66 @@ fn run_quickshell(config: &Path, mode: &str, items: Option<&str>) -> Option<Stri
     Some(answer)
 }
 
+/// Random wallpaper for the time of day it is, dark once the sun is down.
+///
+/// This is the mode menu's third entry, and what `lumen --time` runs on its own:
+/// no prompt, so a timer can call it.
+fn apply_time_of_day() {
+    let moment = get_moment_journee();
+    if let Some(wp) = pick_random(&home_dir().join(format!("Pictures/Wallpapers/season-time/{moment}"))) {
+        apply_all(&wp, moment == "night" || moment == "sunset");
+    }
+}
+
+/// Random wallpaper for the season it is. Always light, as the menu has it.
+fn apply_season() {
+    let saison = get_saison();
+    if let Some(wp) = pick_random(&home_dir().join(format!("Pictures/Wallpapers/season-time/{saison}"))) {
+        apply_all(&wp, false);
+    }
+}
+
+/// Path of the lock the unattended modes hold.
+fn auto_lock() -> PathBuf {
+    std::env::var_os("XDG_RUNTIME_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir)
+        .join("lumen-auto.lock")
+}
+
+/// True when `pid` is a `lumen`, so a recycled pid is never killed by mistake.
+fn is_lumen(pid: u32) -> bool {
+    fs::read(format!("/proc/{pid}/comm"))
+        .map(|comm| comm.strip_suffix(b"\n").unwrap_or(&comm) == b"lumen")
+        .unwrap_or(false)
+}
+
+/// Makes room for an unattended run.
+///
+/// `--time` is made to be called by a timer, and a timer that fires while the
+/// previous run is still painting leaves pywal and matugen writing over each
+/// other's palette. The older run goes first, along with the tools it started —
+/// they outlive their parent, so killing it is not enough.
+fn take_auto_lock() {
+    let lock = auto_lock();
+
+    if let Ok(text) = fs::read_to_string(&lock)
+        && let Ok(pid) = text.trim().parse::<u32>()
+        && pid != std::process::id()
+        && is_lumen(pid)
+    {
+        let pid = pid.to_string();
+        let _ = Command::new("pkill").args(["-9", "-P", &pid]).status();
+        let _ = Command::new("kill").args(["-9", &pid]).status();
+    }
+
+    for tool in ["wal -i", "matugen image"] {
+        let _ = Command::new("pkill").args(["-9", "-f", tool]).status();
+    }
+
+    let _ = fs::write(&lock, std::process::id().to_string());
+}
+
 /// Shows the mode menu and waits for one of the four entries.
 fn choose_mode(frontend: &Frontend) -> Option<Mode> {
     if let Frontend::Quickshell(config) = frontend {
@@ -808,6 +868,8 @@ lumen — one wallpaper, and the whole desktop follows.
 
 Usage:
   lumen                  the menu: dark, light, time of day, season
+  lumen --time           a random wallpaper for the time of day, no prompt
+  lumen --season         a random wallpaper for the season, no prompt
   lumen --settings       the picker's settings: shape, motion, layout, color
   lumen --thumbs [DIR…]  rebuild the thumbnails without showing anything
   lumen --help           this
@@ -819,6 +881,20 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.first().is_some_and(|a| a == "--help" || a == "-h") {
         println!("{USAGE}");
+        return;
+    }
+    // Unattended: no prompt at all, for a timer or a keybind of its own.
+    if let Some(mode) = args.first().and_then(|arg| match arg.as_str() {
+        "--time" => Some(Mode::Heure),
+        "--season" => Some(Mode::Saison),
+        _ => None,
+    }) {
+        take_auto_lock();
+        match mode {
+            Mode::Heure => apply_time_of_day(),
+            _ => apply_season(),
+        }
+        let _ = fs::remove_file(auto_lock());
         return;
     }
     if args.first().is_some_and(|a| a == "--settings") {
@@ -873,24 +949,9 @@ fn main() {
             }
         }
         // Heure — random, dark if night/sunset
-        Some(Mode::Heure) => {
-            let moment = get_moment_journee();
-            if let Some(wp) =
-                pick_random(&home_dir().join(format!("Pictures/Wallpapers/season-time/{moment}")))
-            {
-                let dark = moment == "night" || moment == "sunset";
-                apply_all(&wp, dark);
-            }
-        }
+        Some(Mode::Heure) => apply_time_of_day(),
         // Saison — random, light
-        Some(Mode::Saison) => {
-            let saison = get_saison();
-            if let Some(wp) =
-                pick_random(&home_dir().join(format!("Pictures/Wallpapers/season-time/{saison}")))
-            {
-                apply_all(&wp, false);
-            }
-        }
+        Some(Mode::Saison) => apply_season(),
         // Cancelled.
         None => {}
     }
