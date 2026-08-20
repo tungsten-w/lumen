@@ -187,82 +187,95 @@ Singleton {
         }
     }
 
-    /// Puts one group back to the rofi measurements. Used by the panel's reset,
-    /// and the reason every default lives in this file rather than in Style.
-    function reset(group: string) {
-        const defaults = {
-            modes: {
-                dark: true,
-                light: true,
-                time: true,
-                season: true
-            },
-            shape: {
-                windowRadius: 20,
-                border: 3,
-                headerRadius: 10,
-                entryRadius: 3,
-                thumbRadius: 25,
-                thumbBorder: 3,
-                pillInset: 6.75,
-                ringInset: 10.5,
-                ringWidth: 9
-            },
-            layout: {
-                pickerWidth: 998,
-                pickerHeight: 844,
-                menuWidth: 700,
-                menuHeight: 160,
-                padding: 15,
-                columns: 3,
-                menuColumns: 2,
-                spacing: 10,
-                rowSpacing: 10.5,
-                thumbPadding: 10,
-                thumbAspect: 1.963,
-                thumbZoom: 340,
-                headerHeight: 282.8,
-                backdropZoom: 1,
-                backdropPosition: 0,
-                backdropBlur: 0,
-                backdropDim: 0,
-                entryWidth: 288,
-                entryHeight: 46.5,
-                textSize: 16,
-                iconSize: 60
-            },
-            animation: {
-                enabled: true,
-                speed: 1,
-                enter: 220,
-                exit: 140,
-                move: 200,
-                fade: 160,
-                scroll: 240,
-                stagger: 18,
-                bounce: 1,
-                lift: 1.012
-            },
-            colors: {
-                blur: false,
-                palette: "pywal",
-                background: "auto",
-                foreground: "auto",
-                border: "auto",
-                selection: "auto",
-                thumbBorder: "auto",
-                opacity: 1
-            }
-        };
+    /// Every default, and the reason they live in this file rather than in
+    /// Style: the panel's reset has to be able to read them back.
+    readonly property var defaults: ({
+        modes: {
+            dark: true,
+            light: true,
+            time: true,
+            season: true
+        },
+        shape: {
+            windowRadius: 20,
+            border: 3,
+            headerRadius: 10,
+            entryRadius: 3,
+            thumbRadius: 25,
+            thumbBorder: 3,
+            pillInset: 6.75,
+            ringInset: 10.5,
+            ringWidth: 9
+        },
+        layout: {
+            pickerWidth: 998,
+            pickerHeight: 844,
+            menuWidth: 700,
+            menuHeight: 160,
+            padding: 15,
+            columns: 3,
+            menuColumns: 2,
+            spacing: 10,
+            rowSpacing: 10.5,
+            thumbPadding: 10,
+            thumbAspect: 1.963,
+            thumbZoom: 340,
+            headerHeight: 282.8,
+            backdropZoom: 1,
+            backdropPosition: 0,
+            backdropBlur: 0,
+            backdropDim: 0,
+            entryWidth: 288,
+            entryHeight: 46.5,
+            textSize: 16,
+            iconSize: 60
+        },
+        animation: {
+            enabled: true,
+            speed: 1,
+            enter: 220,
+            exit: 140,
+            move: 200,
+            fade: 160,
+            scroll: 240,
+            stagger: 18,
+            bounce: 1,
+            lift: 1.012
+        },
+        colors: {
+            blur: false,
+            palette: "pywal",
+            background: "auto",
+            foreground: "auto",
+            border: "auto",
+            selection: "auto",
+            thumbBorder: "auto",
+            opacity: 1
+        }
+    })
 
-        const values = defaults[group];
-        for (const key in values) {
-            adapter[group][key] = values[key];
+    /// Puts one whole group back to the rofi measurements.
+    function reset(group: string) {
+        root.resetKeys(group, Object.keys(root.defaults[group]));
+    }
+
+    /// Puts back only the named keys of a group.
+    ///
+    /// The panel resets a tab rather than a group, and since the split a tab is
+    /// only ever part of one: the mode menu's Shape tab and the picker's are
+    /// both the `shape` group, and neither may reset the other window's knobs.
+    function resetKeys(group: string, keys: var) {
+        const values = root.defaults[group];
+        if (!values)
+            return;
+        for (const key of keys) {
+            if (key in values)
+                adapter[group][key] = values[key];
         }
     }
 
     function resetAll() {
-        for (const group of ["modes", "shape", "layout", "animation", "colors"]) {
+        for (const group in root.defaults) {
             root.reset(group);
         }
     }

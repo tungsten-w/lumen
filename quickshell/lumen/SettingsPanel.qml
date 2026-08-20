@@ -14,19 +14,55 @@ import QtQuick
 /// keyboard navigation is a single index, so that a tab is just a different
 /// list, and so that pinning a colour can grow three rows under it without any
 /// of it being special-cased.
+///
+/// One panel is built per window rather than one for both. A single list holding
+/// the two was the shorter code and the worse panel: opening the settings from
+/// the mode menu put thumbnail zoom and grid columns in front of you, none of
+/// which the menu draws, and the live preview beside the panel could not show
+/// what half the rows did. `scope` is what each window asks for, and the rows,
+/// the tabs, the title and the reset all follow from it.
 Item {
     id: panel
 
     /// Emitted when the panel asks to be closed.
     signal closed
 
+    /// Which window this panel belongs to: `"menu"` or `"picker"`. The knobs the
+    /// two windows share — the window shape, the animations, the palette — are
+    /// in both, because they are what that window draws too.
+    required property string scope
+
+    readonly property bool menuScope: panel.scope === "menu"
+
+    /// Room kept on the right of the rows for the scrollbar. The rows anchor
+    /// their control to their own right edge, so without it the handle would sit
+    /// on top of every toggle in the tab.
+    readonly property real scrollGutter: 20
+
     /// Everything is split across these, because forty-odd rows in one scroll is
     /// a wall. Each tab is short enough to see nearly whole.
-    readonly property var tabs: [
+    readonly property var tabs: panel.menuScope ? [
         {
             key: "modes",
-            label: "Menu"
+            label: "Entries"
         },
+        {
+            key: "shape",
+            label: "Shape"
+        },
+        {
+            key: "animation",
+            label: "Motion"
+        },
+        {
+            key: "layout",
+            label: "Layout"
+        },
+        {
+            key: "colors",
+            label: "Color"
+        }
+    ] : [
         {
             key: "shape",
             label: "Shape"
@@ -97,33 +133,45 @@ Item {
 
     function buildRows(): var {
         const rows = [];
+        // Every key this tab put on screen, which is exactly what its Reset is
+        // allowed to touch — the same group is split across the two panels.
+        const touched = [];
         const group = label => rows.push({
             kind: "header",
             label: label
         });
-        const slider = (group, key, label, from, to, step, suffix) => rows.push({
-            kind: "slider",
-            group: group,
-            key: key,
-            label: label,
-            from: from,
-            to: to,
-            step: step ?? 1,
-            suffix: suffix ?? ""
-        });
-        const toggle = (group, key, label) => rows.push({
-            kind: "toggle",
-            group: group,
-            key: key,
-            label: label
-        });
-        const choice = (group, key, label, options) => rows.push({
-            kind: "choice",
-            group: group,
-            key: key,
-            label: label,
-            options: options
-        });
+        const slider = (group, key, label, from, to, step, suffix) => {
+            touched.push(key);
+            rows.push({
+                kind: "slider",
+                group: group,
+                key: key,
+                label: label,
+                from: from,
+                to: to,
+                step: step ?? 1,
+                suffix: suffix ?? ""
+            });
+        };
+        const toggle = (group, key, label) => {
+            touched.push(key);
+            rows.push({
+                kind: "toggle",
+                group: group,
+                key: key,
+                label: label
+            });
+        };
+        const choice = (group, key, label, options) => {
+            touched.push(key);
+            rows.push({
+                kind: "choice",
+                group: group,
+                key: key,
+                label: label,
+                options: options
+            });
+        };
 
         switch (panel.tabs[panel.tab].key) {
         case "modes":
@@ -136,19 +184,24 @@ Item {
 
         case "shape":
             group("Corners");
-            slider("shape", "windowRadius", "Windows", 0, 60, 0.5, " px");
-            slider("shape", "headerRadius", "Header", 0, 60, 0.5, " px");
-            slider("shape", "thumbRadius", "Thumbnails", 0, 80, 0.5, " px");
-            slider("shape", "entryRadius", "Search field", 0, 24, 0.5, " px");
+            slider("shape", "windowRadius", "Window", 0, 60, 0.5, " px");
+            if (!panel.menuScope) {
+                slider("shape", "headerRadius", "Header", 0, 60, 0.5, " px");
+                slider("shape", "thumbRadius", "Thumbnails", 0, 80, 0.5, " px");
+                slider("shape", "entryRadius", "Search field", 0, 24, 0.5, " px");
+            }
 
             group("Borders");
-            slider("shape", "border", "Windows", 0, 12, 0.5, " px");
-            slider("shape", "thumbBorder", "Thumbnails", 0, 12, 0.5, " px");
+            slider("shape", "border", "Window", 0, 12, 0.5, " px");
+            if (!panel.menuScope)
+                slider("shape", "thumbBorder", "Thumbnails", 0, 12, 0.5, " px");
 
-            group("Mode menu");
-            slider("shape", "pillInset", "Pill inset", 0, 30, 0.25, " px");
-            slider("shape", "ringWidth", "Ring width", 0, 20, 0.5, " px");
-            slider("shape", "ringInset", "Ring inset", 0, 30, 0.5, " px");
+            if (panel.menuScope) {
+                group("Selected entry");
+                slider("shape", "pillInset", "Pill inset", 0, 30, 0.25, " px");
+                slider("shape", "ringWidth", "Ring width", 0, 20, 0.5, " px");
+                slider("shape", "ringInset", "Ring inset", 0, 30, 0.5, " px");
+            }
             break;
 
         case "animation":
@@ -164,42 +217,51 @@ Item {
             slider("animation", "move", "Selection", 0, 800, 10, " ms");
             slider("animation", "fade", "Fades and hover", 0, 800, 10, " ms");
             slider("animation", "scroll", "Scrolling", 0, 800, 10, " ms");
-            slider("animation", "stagger", "Thumbnail stagger", 0, 80, 1, " ms");
+            // The delay between two thumbnails arriving. There is no grid in
+            // the mode menu, so there is nothing for it to stagger.
+            if (!panel.menuScope)
+                slider("animation", "stagger", "Thumbnail stagger", 0, 80, 1, " ms");
             break;
 
         case "layout":
-            group("Grid");
-            slider("layout", "columns", "Columns", 1, 8, 1);
-            slider("layout", "spacing", "Column spacing", 0, 40, 0.5, " px");
-            slider("layout", "rowSpacing", "Row spacing", 0, 40, 0.5, " px");
+            if (panel.menuScope) {
+                group("Menu window");
+                slider("layout", "menuWidth", "Width", 300, 1600, 2, " px");
+                slider("layout", "menuHeight", "Height", 80, 600, 2, " px");
+                slider("layout", "menuColumns", "Columns", 1, 4, 1);
+                slider("layout", "iconSize", "Icon size", 20, 140, 1, " px");
+            } else {
+                group("Grid");
+                slider("layout", "columns", "Columns", 1, 8, 1);
+                slider("layout", "spacing", "Column spacing", 0, 40, 0.5, " px");
+                slider("layout", "rowSpacing", "Row spacing", 0, 40, 0.5, " px");
 
-            group("Thumbnails");
-            slider("layout", "thumbAspect", "Aspect", 1, 3, 0.01, "");
-            slider("layout", "thumbZoom", "Zoom", 100, 700, 5, " px");
-            slider("layout", "thumbPadding", "Padding", 0, 40, 0.5, " px");
+                group("Thumbnails");
+                slider("layout", "thumbAspect", "Aspect", 1, 3, 0.01, "");
+                slider("layout", "thumbZoom", "Zoom", 100, 700, 5, " px");
+                slider("layout", "thumbPadding", "Padding", 0, 40, 0.5, " px");
+            }
 
+            // The same image in both: a strip across the picker's header, and
+            // the whole card behind the mode menu.
             group("Wallpaper backdrop");
             slider("layout", "backdropZoom", "Zoom", 0.5, 3, 0.01, "×");
             slider("layout", "backdropPosition", "Framing", 0, 1, 0.01, "");
             slider("layout", "backdropBlur", "Blur", 0, 1, 0.01, "");
             slider("layout", "backdropDim", "Dim", 0, 1, 0.01, "");
 
-            group("Picker window");
-            slider("layout", "pickerWidth", "Width", 400, 1800, 2, " px");
-            slider("layout", "pickerHeight", "Height", 300, 1400, 2, " px");
-            slider("layout", "padding", "Padding", 0, 60, 0.5, " px");
-            slider("layout", "headerHeight", "Header height", 60, 500, 2, " px");
+            if (!panel.menuScope) {
+                group("Picker window");
+                slider("layout", "pickerWidth", "Width", 400, 1800, 2, " px");
+                slider("layout", "pickerHeight", "Height", 300, 1400, 2, " px");
+                slider("layout", "padding", "Padding", 0, 60, 0.5, " px");
+                slider("layout", "headerHeight", "Header height", 60, 500, 2, " px");
 
-            group("Search field");
-            slider("layout", "entryWidth", "Width", 100, 700, 2, " px");
-            slider("layout", "entryHeight", "Height", 24, 100, 0.5, " px");
-            slider("layout", "textSize", "Text size", 8, 40, 1, " px");
-
-            group("Mode menu");
-            slider("layout", "menuWidth", "Width", 300, 1600, 2, " px");
-            slider("layout", "menuHeight", "Height", 80, 600, 2, " px");
-            slider("layout", "menuColumns", "Columns", 1, 4, 1);
-            slider("layout", "iconSize", "Icon size", 20, 140, 1, " px");
+                group("Search field");
+                slider("layout", "entryWidth", "Width", 100, 700, 2, " px");
+                slider("layout", "entryHeight", "Height", 24, 100, 0.5, " px");
+                slider("layout", "textSize", "Text size", 8, 40, 1, " px");
+            }
             break;
 
         case "colors":
@@ -226,6 +288,7 @@ Item {
                 }
             ]);
             for (const colour of panel.colorKeys) {
+                touched.push(colour.key);
                 rows.push({
                     kind: "colour",
                     key: colour.key,
@@ -275,6 +338,7 @@ Item {
         rows.push({
             kind: "reset",
             group: panel.tabs[panel.tab].key,
+            keys: touched,
             label: "Reset"
         });
         return rows;
@@ -346,10 +410,17 @@ Item {
         return line ? line.widget : null;
     }
 
+    /// Puts back everything the current tab has on screen, and nothing else.
+    function resetTab() {
+        const row = panel.rows.find(line => line.kind === "reset");
+        if (row)
+            Settings.resetKeys(row.group, row.keys);
+    }
+
     function trigger() {
         const row = panel.rows[panel.currentIndex];
         if (row.kind === "reset") {
-            Settings.reset(row.group);
+            Settings.resetKeys(row.group, row.keys);
             return;
         }
         const item = panel.currentWidget();
@@ -407,8 +478,9 @@ Item {
             panel.trigger();
             return true;
         case Qt.Key_R:
-            // Puts back the tab you are in, rather than everything.
-            Settings.reset(panel.tabs[panel.tab].key);
+            // Puts back the tab you are in, rather than everything — and only
+            // the knobs it shows, not the other panel's half of the group.
+            panel.resetTab();
             return true;
         case Qt.Key_Escape:
         case Qt.Key_Q:
@@ -444,7 +516,7 @@ Item {
 
             x: Style.picker.headerX + 6
             y: Style.picker.headerY
-            text: "Settings"
+            text: panel.menuScope ? "Menu settings" : "Picker settings"
             color: Colors.foreground
             font.family: Style.textFont
             font.pixelSize: Style.textSize * 1.6
@@ -559,13 +631,17 @@ Item {
 
             x: tabBar.x
             y: tabBar.y + tabBar.height + 10
-            width: tabBar.width
+            width: tabBar.width - panel.scrollGutter
             height: parent.height - y - Style.picker.headerX
             clip: true
             interactive: false // the wheel is handled below, like the grid's
             contentHeight: column.height
 
             Behavior on contentY {
+                // Off while the handle is being dragged: an eased contentY makes
+                // the handle lag behind the cursor that is carrying it.
+                enabled: !scroller.dragging
+
                 NumberAnimation {
                     duration: Style.scrollDuration
                     easing.type: Easing.OutCubic
@@ -737,7 +813,7 @@ Item {
                                 MouseArea {
                                     anchors.fill: parent
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: Settings.reset(line.modelData.group)
+                                    onClicked: Settings.resetKeys(line.modelData.group, line.modelData.keys)
                                 }
                             }
                         }
@@ -763,6 +839,17 @@ Item {
                     }
                 }
             }
+        }
+
+        /// Says how much of the tab is out of sight, and scrolls it. Sits in the
+        /// gutter the rows leave for it, flush with their right edge.
+        ScrollBar {
+            id: scroller
+
+            flickable: flick
+            x: flick.x + flick.width + 8
+            y: flick.y
+            height: flick.height
         }
     }
 }

@@ -68,17 +68,20 @@ day or the season and never think about it again.
 
 - **Whole-desktop theming** — one image repaints GTK, rofi, tmux, Ghostty,
   Neovim, Spotify, Obsidian, your shell and your lock screen.
-- **Two palette engines at once** — [pywal](https://github.com/dylanaraps/pywal)
+- **Three palettes, one switch** — [pywal](https://github.com/dylanaraps/pywal)
   for the classic sixteen, [matugen](https://github.com/InioX/matugen) for
-  Material You. Both run in parallel, and they feed different apps.
+  Material You, and [Noctalia](https://github.com/noctalia-dev/noctalia)'s own.
+  All three run on every wallpaper and feed different apps; the picker draws
+  itself from whichever one you point it at in **Color ▸ Source**.
 - **An animated picker** drawn with [Quickshell](https://quickshell.org): a
   thumbnail grid that filters as you type, slides its selection around, and fades
   each thumbnail in as it decodes.
 - **Vim keys everywhere** — `hjkl`, `gg`/`G`, `Ctrl+d`/`Ctrl+u`, two modes, and a
   block cursor to tell you which one you are in.
-- **A settings panel with 53 knobs** — corner radii, animation timings, column
-  counts, blur, colors — every one of them redrawn **live** on the picker next to
-  it, none of them needing a restart.
+- **A settings panel per window** — the mode menu has its own, the picker has
+  its own, 52 knobs between them: corner radii, animation timings, column counts,
+  blur, colors — every one redrawn **live** on the window next to it, none of
+  them needing a restart.
 - **Real blur** — frosted glass over the wallpaper in the header, and compositor
   blur behind the window itself.
 - **Light / dark that means something** — the cursor swaps (Bibata Classic ↔
@@ -106,7 +109,7 @@ Launch `lumen` and pick a mode from the menu:
 | ☀️ | Light | Browse `light/` wallpapers with thumbnails |
 | 🕘 | Time | Random wallpaper matching the current time of day |
 | 🍂 | Season | Random wallpaper matching the current season |
-| ⚙️ | Settings | Open the settings panel |
+| ⚙️ | Settings | Open the menu's own settings |
 
 Any of the first four can be switched off in the settings if you never use one.
 The cog cannot — that would leave you with no way back in.
@@ -172,10 +175,11 @@ movement rofi could not do: the window springs open, the selection slides from
 one wallpaper to the next, the grid rearranges itself as you type, and thumbnails
 fade in as they decode. Every one of those numbers is then yours to change.
 
-Colors are not duplicated anywhere. The QML reads the very same
-`~/.config/rofi/colors.rasi` and `~/.cache/wal/colors-rofi-dark.rasi` that the
-rasi themes read, so the picker recolors itself along with the rest of the
-desktop, for free, forever.
+Colors are not duplicated anywhere. The QML reads the very same palette files
+the rest of the desktop reads — `~/.cache/wal/colors-rofi-dark.rasi` for pywal,
+`~/.config/rofi/colors.rasi` for matugen, `~/.config/rofi/noctalia.rasi` for
+Noctalia — so the picker recolors itself along with everything else, for free,
+forever. **Color ▸ Source** says which of the three it listens to.
 
 ### Keys
 
@@ -215,37 +219,45 @@ outside cancels. The mode menu takes `hjkl`, arrows, <kbd>Enter</kbd> and
 
 <br>
 
-Three ways into the same panel, whichever is closest to hand:
+The mode menu and the picker each have their own panel — a panel only lists what
+its own window draws. Three ways in, whichever is closest to hand:
 
 ```bash
-lumen --settings            # from a terminal, with the picker beside it as a preview
+lumen --settings            # the picker's, with the grid beside it as a preview
 ```
 
-- <kbd>Ctrl</kbd>+<kbd>,</kbd> from inside the picker or the mode menu;
-- the **cog**, the fifth entry of the mode menu — it opens the panel straight on
-  its **Menu** tab;
+- <kbd>Ctrl</kbd>+<kbd>,</kbd> from inside the picker or the mode menu, each
+  opening its own;
+- the **cog**, the fifth entry of the mode menu — the menu's panel, straight on
+  its **Entries** tab;
 - or type **`settings` into the picker's search field**. The grid tells you it is
   a command as you type it, and the field clears itself once the panel is out.
 
 Nothing in there is a preview: the rows write straight into the settings, the
-style recomputes, and the picker **beside it** redraws on the same frame. Fifty
-three values, across five tabs, each short enough to see nearly whole:
+style recomputes, and the window **beside it** redraws on the same frame. There
+is no thumbnail zoom in the menu's panel, and no menu entries in the picker's:
 
-| Tab | What is in it |
-|---|---|
-| **Menu** | Which of the four modes the mode menu offers |
-| **Shape** | Corner radii (windows, header, thumbnails, search field), border widths, the mode menu's pill and ring |
-| **Motion** | Animations on/off, speed, bounce, selection lift, and each duration on its own |
-| **Layout** | Columns and spacing, thumbnail aspect / zoom / padding, wallpaper backdrop zoom / framing / blur / dim, window and header sizes, search field, mode menu |
-| **Color** | Background opacity, blur behind the window, and the five palette colors |
+| Tab | The menu's | The picker's |
+|---|---|---|
+| **Entries** | Which of the four modes the menu offers | — |
+| **Shape** | Window corner and border, the selected entry's pill and ring | Corners of the window, header, thumbnails and search field; window and thumbnail borders |
+| **Motion** | Animations on/off, speed, bounce, selection lift, and each duration on its own | The same, plus the grid's thumbnail stagger |
+| **Layout** | Menu size, columns, icon size, wallpaper backdrop | Grid and spacing, thumbnails, backdrop, window and header sizes, search field |
+| **Color** | Which palette to follow, background opacity, blur behind the window, and the five palette colors | The same |
+
+Thirty four values for the menu across five tabs, forty one for the picker across
+four, each tab short enough to see nearly whole — and on the two that are not, a
+bar down the right edge shows how much is still under the fold, and drags. The
+twenty three that appear in both — the window's shape, the animations, the
+palette — are there because both windows draw them.
 
 | Panel | |
 |---|---|
-| <kbd>Tab</kbd> / <kbd>1</kbd>…<kbd>5</kbd> | Move between tabs |
+| <kbd>Tab</kbd> / <kbd>1</kbd>…<kbd>5</kbd> | Move between tabs (the picker has four of them) |
 | <kbd>j</kbd> / <kbd>k</kbd> | Move through the settings |
 | <kbd>h</kbd> / <kbd>l</kbd> | Change the value (<kbd>Shift</kbd> for ten times the step) |
 | <kbd>Enter</kbd> | Flip a switch, or pin a color |
-| <kbd>r</kbd> | Reset the tab you are in |
+| <kbd>r</kbd> | Reset the tab you are in — only what it shows, never the other panel's half |
 | <kbd>Esc</kbd> / <kbd>q</kbd> | Close the panel |
 
 Values land in `~/.config/lumen/settings.json` as you move a slider — there is no
@@ -270,10 +282,12 @@ as it slides out — while the rest of the screen stays sharp. It only shows thr
 once *Background opacity* is under 1, and it asks over `ext-background-effect`; a
 compositor that does not speak it simply ignores the request. Hyprland 0.56 does.
 
-**Colors** start on `auto`, which means "whatever pywal and matugen made of the
-current wallpaper". Pressing <kbd>Enter</kbd> on one pins it to what is on screen
-right now and opens hue, saturation and lightness under it; pressing
-<kbd>Enter</kbd> again hands it back to the wallpaper.
+**Colors** start on `auto`, which means "whatever the palette made of the current
+wallpaper". **Source** picks which palette that is — pywal, matugen or Noctalia —
+and the five colors under it move together when you change it. Pressing
+<kbd>Enter</kbd> on one pins it to what is on screen right now and opens hue,
+saturation and lightness under it; pressing <kbd>Enter</kbd> again hands it back
+to the wallpaper.
 
 </details>
 

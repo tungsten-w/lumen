@@ -94,6 +94,8 @@ OverlayWindow {
     aside: SettingsPanel {
         id: settings
 
+        scope: "menu"
+
         anchors.fill: parent
         onClosed: win.asideOpen = false
     }
@@ -254,7 +256,19 @@ OverlayWindow {
 
                             // A nudge as the selection lands on the entry, and a
                             // smaller one while the pointer is over it.
-                            scale: cell.current ? Style.liftBy(6.7) : (hover.hovered ? Style.liftBy(3.3) : 1)
+                            readonly property real lift: cell.current ? Style.liftBy(6.7) : (hover.hovered ? Style.liftBy(3.3) : 1)
+
+                            /// Never far enough to reach the edge of the white
+                            /// bar. The bar is a ClippingRectangle — it has to
+                            /// be, or the second row would show above and below
+                            /// it as it slides in — so a glyph that grows past
+                            /// it does not come back bigger, it comes back with
+                            /// flat sides where the clip cut it. At the top of
+                            /// the lift slider the menu's glyphs were sliced
+                            /// square across the top and the bottom.
+                            readonly property real ceiling: glyph.implicitHeight > 0 ? Math.max(1, (Style.menu.barHeight - 6) / glyph.implicitHeight) : 1
+
+                            scale: Math.min(glyph.lift, glyph.ceiling)
 
                             Behavior on scale {
                                 NumberAnimation {

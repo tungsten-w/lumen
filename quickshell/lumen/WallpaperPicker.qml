@@ -33,6 +33,8 @@ OverlayWindow {
     aside: SettingsPanel {
         id: settings
 
+        scope: "picker"
+
         anchors.fill: parent
         // Closing the panel normally hands the keyboard back to the grid. In
         // preview mode there is no grid to hand it back to — nothing can be

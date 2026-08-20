@@ -27,6 +27,33 @@ fn home_dir() -> PathBuf {
     PathBuf::from(std::env::var("HOME").expect("HOME n'est pas défini"))
 }
 
+/// Where every window looks for the wallpaper that is currently up: the picker's
+/// header, the backdrop behind the mode menu, and both rofi themes.
+const CURRENT_WALLPAPER: &str = "/tmp/current_wallpaper.png";
+
+/// Puts `CURRENT_WALLPAPER` back after a reboot.
+///
+/// `/tmp` is a tmpfs — it lives in RAM and is empty on every boot — so the copy
+/// written when a wallpaper was chosen is gone by the next power-on, and the
+/// menu comes up with no image behind it until something sets a wallpaper again.
+///
+/// The symlink in `Pictures/Wallpapers` is the pointer that does survive, so it
+/// is what the temporary copy is rebuilt from. Only when the copy is missing: a
+/// wallpaper change writes a fresh one, and re-copying the image on every launch
+/// would be felt on a large one.
+fn restore_current_wallpaper() {
+    let shown = Path::new(CURRENT_WALLPAPER);
+    if shown.exists() {
+        return;
+    }
+    // `exists()` follows the link, so one left pointing at a wallpaper that has
+    // since been deleted is skipped rather than copied as an error.
+    let kept = home_dir().join("Pictures/Wallpapers/current_wallpaper.jpg");
+    if kept.exists() {
+        let _ = fs::copy(&kept, shown);
+    }
+}
+
 fn parallelism() -> usize {
     thread::available_parallelism()
         .map(|n| n.get())
@@ -455,7 +482,7 @@ fn apply_all(wallpaper: &Path, dark: bool) {
     {
         let wallpaper = wallpaper.to_path_buf();
         handles.push(thread::spawn(move || {
-            let _ = fs::copy(&wallpaper, "/tmp/current_wallpaper.png");
+            let _ = fs::copy(&wallpaper, CURRENT_WALLPAPER);
         }));
     }
 
@@ -874,8 +901,9 @@ Usage:
   lumen --thumbs [DIR…]  rebuild the thumbnails without showing anything
   lumen --help           this
 
-The settings also open from inside the picker, with Ctrl+, or by typing
-`settings` into its search field.";
+The picker's settings also open from inside it, with Ctrl+, or by typing
+`settings` into its search field. The mode menu keeps its own panel, on its cog
+or on the same Ctrl+,.";
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -883,6 +911,9 @@ fn main() {
         println!("{USAGE}");
         return;
     }
+    // Nothing below draws before this: /tmp does not survive a reboot, and the
+    // menu is the first thing that wants the image back.
+    restore_current_wallpaper();
     // Unattended: no prompt at all, for a timer or a keybind of its own.
     if let Some(mode) = args.first().and_then(|arg| match arg.as_str() {
         "--time" => Some(Mode::Heure),
