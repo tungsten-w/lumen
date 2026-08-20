@@ -2,9 +2,9 @@ import QtQuick
 
 /// One colour of the settings: either following the wallpaper, or pinned.
 ///
-/// Pinning does not open a colour wheel — it freezes whatever pywal is showing
-/// right now and adds three rows underneath to move it around, which is both
-/// less code and a better starting point than a blank picker.
+/// Pinning does not open a colour wheel — it freezes whatever the palette is
+/// showing right now and adds three rows underneath to move it around, which is
+/// both less code and a better starting point than a blank picker.
 Item {
     id: row
 

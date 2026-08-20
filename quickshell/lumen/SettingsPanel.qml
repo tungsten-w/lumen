@@ -117,6 +117,13 @@ Item {
             key: key,
             label: label
         });
+        const choice = (group, key, label, options) => rows.push({
+            kind: "choice",
+            group: group,
+            key: key,
+            label: label,
+            options: options
+        });
 
         switch (panel.tabs[panel.tab].key) {
         case "modes":
@@ -201,6 +208,23 @@ Item {
             toggle("colors", "blur", "Blur behind the window");
 
             group("Palette");
+            // Which generator the five colours below are read from. All three
+            // are rewritten on every wallpaper change; this only picks the one
+            // the picker listens to.
+            choice("colors", "palette", "Source", [
+                {
+                    value: "pywal",
+                    label: "pywal"
+                },
+                {
+                    value: "matugen",
+                    label: "matugen"
+                },
+                {
+                    value: "noctalia",
+                    label: "noctalia"
+                }
+            ]);
             for (const colour of panel.colorKeys) {
                 rows.push({
                     kind: "colour",
@@ -614,6 +638,8 @@ Item {
                                     return sliderRow;
                                 case "toggle":
                                     return toggleRow;
+                                case "choice":
+                                    return choiceRow;
                                 case "colour":
                                     return colourRow;
                                 case "channel":
@@ -665,6 +691,19 @@ Item {
                                 label: line.modelData.label
                                 group: line.modelData.group
                                 key: line.modelData.key
+                                selected: line.current
+                            }
+                        }
+
+                        Component {
+                            id: choiceRow
+
+                            SettingChoice {
+                                width: loader.width
+                                label: line.modelData.label
+                                group: line.modelData.group
+                                key: line.modelData.key
+                                options: line.modelData.options
                                 selected: line.current
                             }
                         }

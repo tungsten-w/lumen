@@ -68,15 +68,17 @@ day or the season and never think about it again.
 
 - **Whole-desktop theming** — one image repaints GTK, rofi, tmux, Ghostty,
   Neovim, Spotify, Obsidian, your shell and your lock screen.
-- **Two palette engines at once** — [pywal](https://github.com/dylanaraps/pywal)
+- **Three palettes, one switch** — [pywal](https://github.com/dylanaraps/pywal)
   for the classic sixteen, [matugen](https://github.com/InioX/matugen) for
-  Material You. Both run in parallel, and they feed different apps.
+  Material You, and [Noctalia](https://github.com/noctalia-dev/noctalia)'s own.
+  All three run on every wallpaper and feed different apps; the picker draws
+  itself from whichever one you point it at in the settings panel.
 - **An animated picker** drawn with [Quickshell](https://quickshell.org): a
   thumbnail grid that filters as you type, slides its selection around, and fades
   each thumbnail in as it decodes.
 - **Vim keys everywhere** — `hjkl`, `gg`/`G`, `Ctrl+d`/`Ctrl+u`, two modes, and a
   block cursor to tell you which one you are in.
-- **A settings panel with 53 knobs** — corner radii, animation timings, column
+- **A settings panel with 54 knobs** — corner radii, animation timings, column
   counts, blur, colors — every one of them redrawn **live** on the picker next to
   it, none of them needing a restart.
 - **Real blur** — frosted glass over the wallpaper in the header, and compositor
@@ -172,10 +174,11 @@ movement rofi could not do: the window springs open, the selection slides from
 one wallpaper to the next, the grid rearranges itself as you type, and thumbnails
 fade in as they decode. Every one of those numbers is then yours to change.
 
-Colors are not duplicated anywhere. The QML reads the very same
-`~/.config/rofi/colors.rasi` and `~/.cache/wal/colors-rofi-dark.rasi` that the
-rasi themes read, so the picker recolors itself along with the rest of the
-desktop, for free, forever.
+Colors are not duplicated anywhere. The QML reads the very same palette files
+the rest of the desktop reads — `~/.cache/wal/colors-rofi-dark.rasi` for pywal,
+`~/.config/rofi/colors.rasi` for matugen, `~/.config/rofi/noctalia.rasi` for
+Noctalia — so the picker recolors itself along with everything else, for free,
+forever. **Color ▸ Source** says which of the three it listens to.
 
 ### Keys
 
@@ -237,7 +240,7 @@ three values, across five tabs, each short enough to see nearly whole:
 | **Shape** | Corner radii (windows, header, thumbnails, search field), border widths, the mode menu's pill and ring |
 | **Motion** | Animations on/off, speed, bounce, selection lift, and each duration on its own |
 | **Layout** | Columns and spacing, thumbnail aspect / zoom / padding, wallpaper backdrop zoom / framing / blur / dim, window and header sizes, search field, mode menu |
-| **Color** | Background opacity, blur behind the window, and the five palette colors |
+| **Color** | Background opacity, blur behind the window, which palette to follow, and the five palette colors |
 
 | Panel | |
 |---|---|
@@ -270,10 +273,12 @@ as it slides out — while the rest of the screen stays sharp. It only shows thr
 once *Background opacity* is under 1, and it asks over `ext-background-effect`; a
 compositor that does not speak it simply ignores the request. Hyprland 0.56 does.
 
-**Colors** start on `auto`, which means "whatever pywal and matugen made of the
-current wallpaper". Pressing <kbd>Enter</kbd> on one pins it to what is on screen
-right now and opens hue, saturation and lightness under it; pressing
-<kbd>Enter</kbd> again hands it back to the wallpaper.
+**Colors** start on `auto`, which means "whatever the palette made of the current
+wallpaper". **Source** picks which palette that is — pywal, matugen or Noctalia —
+and the five colors under it move together when you change it. Pressing
+<kbd>Enter</kbd> on one pins it to what is on screen right now and opens hue,
+saturation and lightness under it; pressing <kbd>Enter</kbd> again hands it back
+to the wallpaper.
 
 </details>
 

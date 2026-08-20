@@ -22,7 +22,7 @@ Singleton {
     readonly property var animation: adapter.animation
     readonly property var colors: adapter.colors
 
-    /// A colour left on this keeps following pywal and matugen.
+    /// A colour left on this keeps following the palette in `colors.palette`.
     readonly property string auto: "auto"
 
     /// True between a change and the write that carries it to disk.
@@ -167,6 +167,12 @@ Singleton {
 
             /// `"auto"` follows the wallpaper, anything else is a fixed colour.
             property JsonObject colors: JsonObject {
+                /// Which generator's palette the `auto` colours read. All three
+                /// are rewritten on every wallpaper change, so this picks the
+                /// look rather than whether the colours follow along: `pywal`
+                /// for the classic sixteen the rofi themes drew, `matugen` for
+                /// Material You, `noctalia` for the shell's own.
+                property string palette: "pywal"
                 property string background: "auto"
                 property string foreground: "auto"
                 property string border: "auto" // @urgent-background
@@ -239,6 +245,7 @@ Singleton {
             },
             colors: {
                 blur: false,
+                palette: "pywal",
                 background: "auto",
                 foreground: "auto",
                 border: "auto",
