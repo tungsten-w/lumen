@@ -279,4 +279,39 @@ Singleton {
             root.reset(group);
         }
     }
+
+    /// The whole configuration as a plain object, which is what a preset saves.
+    function snapshot(): var {
+        const out = {};
+        for (const group in root.defaults) {
+            out[group] = {};
+            for (const key in root.defaults[group]) {
+                out[group][key] = adapter[group][key];
+            }
+        }
+        return out;
+    }
+
+    /// Writes back whatever a preset carries, and leaves everything else where
+    /// it was: a file holding nothing but `colors` restyles the palette without
+    /// touching the layout, which is what makes a colours-only preset worth
+    /// passing around.
+    ///
+    /// Groups and keys that are not ours are skipped rather than trusted. These
+    /// files are hand-edited and copied between machines, and one typo should
+    /// cost you that line rather than the whole preset.
+    function applyValues(values: var) {
+        if (!values || typeof values !== "object")
+            return;
+        for (const group in values) {
+            const known = root.defaults[group];
+            const incoming = values[group];
+            if (!known || !incoming || typeof incoming !== "object")
+                continue;
+            for (const key in incoming) {
+                if (key in known)
+                    adapter[group][key] = incoming[key];
+            }
+        }
+    }
 }

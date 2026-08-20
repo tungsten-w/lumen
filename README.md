@@ -244,16 +244,52 @@ is no thumbnail zoom in the menu's panel, and no menu entries in the picker's:
 | **Motion** | Animations on/off, speed, bounce, selection lift, and each duration on its own | The same, plus the grid's thumbnail stagger |
 | **Layout** | Menu size, columns, icon size, wallpaper backdrop | Grid and spacing, thumbnails, backdrop, window and header sizes, search field |
 | **Color** | Which palette to follow, background opacity, blur behind the window, and the five palette colors | The same |
+| **Tags** | — | Install [wallreco](https://github.com/tungsten-w/wallreco), or run it to tag new wallpapers and recompute the old ones |
+| **Presets** | Save the whole configuration under a name, and put any of them back | The same |
 
-Thirty four values for the menu across five tabs, forty one for the picker across
-four, each tab short enough to see nearly whole — and on the two that are not, a
-bar down the right edge shows how much is still under the fold, and drags. The
-twenty three that appear in both — the window's shape, the animations, the
-palette — are there because both windows draw them.
+Thirty four values for the menu, forty one for the picker, six tabs each — two
+of which hold no values at all, only the jobs and the presets below. Each tab is short
+enough to see nearly whole, and on the ones that are not, a bar down the right
+edge shows how much is still under the fold, and drags. The twenty three values
+that appear in both panels — the window's shape, the animations, the palette —
+are there because both windows draw them.
+
+**Presets** are whole configurations you can swap between. Each one is a single
+JSON file in `~/.config/lumen/presets`, shaped exactly like `settings.json`
+itself — so a preset is something you can read, hand-edit, keep in a dotfiles
+repo, or send to someone who liked your setup. *Save this configuration* asks for
+a name and writes all fifty two values; *Apply* puts them back.
+
+`Default` is not a file: it is the original rofi measurements, which is what
+makes it the one preset that can never go missing.
+
+Applying only writes back the groups a file actually holds, so a preset carrying
+nothing but `colors` restyles the palette and leaves your layout alone:
+
+```jsonc
+// ~/.config/lumen/presets/midnight.json — a palette, and nothing else
+{
+  "colors": { "palette": "noctalia", "opacity": 0.85, "blur": true }
+}
+```
+
+Keys and groups that are not ours are skipped rather than trusted: these files
+get hand-edited and copied between machines, and one typo should cost you that
+line rather than the whole preset.
+
+**Tags** is where [wallreco](https://github.com/tungsten-w/wallreco) lives. It
+writes its tags into the filenames — `sunset.png` becomes
+`sunset-#orange-#warm-#sky.png` — which is exactly what the picker's search field
+reads, so a tagged collection filters by keyword. The tab finds the binary or
+offers to build it, then gives you two buttons: one that tags whatever has no
+tags yet, and one that recomputes the lot. The second renames every wallpaper in
+`~/Pictures/Wallpapers`, so it asks twice; `wallreco --undo` puts the old names
+back.
 
 | Panel | |
 |---|---|
-| <kbd>Tab</kbd> / <kbd>1</kbd>…<kbd>5</kbd> | Move between tabs (the picker has four of them) |
+| <kbd>Tab</kbd> / <kbd>1</kbd>…<kbd>6</kbd> | Move between tabs |
+| <kbd>x</kbd> | Delete the preset under the cursor (twice, it asks) |
 | <kbd>j</kbd> / <kbd>k</kbd> | Move through the settings |
 | <kbd>h</kbd> / <kbd>l</kbd> | Change the value (<kbd>Shift</kbd> for ten times the step) |
 | <kbd>Enter</kbd> | Flip a switch, or pin a color |

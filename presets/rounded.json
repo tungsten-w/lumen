@@ -1,0 +1,64 @@
+{
+  "modes": {
+    "dark": true,
+    "light": true,
+    "time": true,
+    "season": true
+  },
+  "shape": {
+    "windowRadius": 60,
+    "border": 0,
+    "headerRadius": 60,
+    "entryRadius": 24,
+    "thumbRadius": 80,
+    "thumbBorder": 0,
+    "pillInset": 0,
+    "ringInset": 0,
+    "ringWidth": 0
+  },
+  "layout": {
+    "pickerWidth": 998,
+    "pickerHeight": 844,
+    "menuWidth": 700,
+    "menuHeight": 160,
+    "padding": 15,
+    "columns": 4,
+    "menuColumns": 4,
+    "spacing": 0,
+    "rowSpacing": 0,
+    "thumbPadding": 10,
+    "thumbAspect": 1.9,
+    "thumbZoom": 340,
+    "headerHeight": 282.8,
+    "backdropZoom": 1.04,
+    "backdropPosition": 0.68,
+    "backdropBlur": 1,
+    "backdropDim": 0,
+    "entryWidth": 288,
+    "entryHeight": 46.5,
+    "textSize": 16,
+    "iconSize": 81
+  },
+  "animation": {
+    "enabled": true,
+    "speed": 1,
+    "enter": 220,
+    "exit": 140,
+    "move": 200,
+    "fade": 160,
+    "scroll": 240,
+    "stagger": 18,
+    "bounce": 1,
+    "lift": 1.012
+  },
+  "colors": {
+    "blur": true,
+    "palette": "noctalia",
+    "background": "auto",
+    "foreground": "auto",
+    "border": "auto",
+    "selection": "auto",
+    "thumbBorder": "auto",
+    "opacity": 1
+  }
+}
