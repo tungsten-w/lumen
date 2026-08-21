@@ -74,18 +74,47 @@ Singleton {
             root.status = "That name has nothing in it.";
             return;
         }
-        // A FileView takes a new path asynchronously, so a writer that is kept
-        // around and re-pointed puts the second preset over the first — which is
-        // exactly what it did. One writer per save has no path to change.
-        // `setText` also makes the folders it needs, so the first preset works
-        // on a machine that has never had a presets directory.
-        const writer = pen.createObject(root, {
-            path: root.path(clean)
-        });
-        writer.setText(JSON.stringify(Settings.snapshot(), null, 2) + "\n");
-        writer.destroy(2000);
+        root.write(clean, Settings.snapshot());
         root.status = `Saved as ${clean}.`;
         Qt.callLater(root.rescan);
+    }
+
+    /// Writes what is on screen into a preset that is already there, so that
+    /// tuning a saved look is one button rather than deleting it and typing the
+    /// name again.
+    ///
+    /// It reads the file before it writes, and puts back only the keys that file
+    /// already held — which is what makes it the exact inverse of `apply`.
+    /// Applying a colours-only preset leaves your layout alone; updating one has
+    /// to leave the layout out of the file, or the first update would quietly
+    /// turn it into a whole configuration and it would never restyle only the
+    /// palette again.
+    ///
+    /// There is no rescan afterwards: the name is already in the list and the
+    /// file already in the folder.
+    function overwrite(name: string) {
+        const clean = root.clean(name);
+        if (!clean)
+            return;
+        sieve.createObject(root, {
+            name: clean,
+            path: root.path(clean)
+        });
+    }
+
+    /// A set of values, to the file of a preset that has already been named.
+    ///
+    /// A FileView takes a new path asynchronously, so a writer that is kept
+    /// around and re-pointed puts the second preset over the first — which is
+    /// exactly what it did. One writer per write has no path to change.
+    /// `setText` also makes the folders it needs, so the first preset works on a
+    /// machine that has never had a presets directory.
+    function write(name: string, values: var) {
+        const writer = pen.createObject(root, {
+            path: root.path(name)
+        });
+        writer.setText(JSON.stringify(values, null, 2) + "\n");
+        writer.destroy(2000);
     }
 
     function remove(name: string) {
@@ -134,6 +163,42 @@ Singleton {
         onLoadFailed: {
             root.status = `${root.pending} could not be read.`;
             root.pending = "";
+        }
+    }
+
+    /// The read an update does first, so that it can put back what the preset
+    /// holds rather than everything.
+    ///
+    /// One reader per update, for the same reason there is one writer per write:
+    /// a FileView takes a new path asynchronously, so a single reader re-pointed
+    /// at a second preset before the first has landed drops that first update on
+    /// the floor — and the status line, already showing the second name, says
+    /// nothing about it. The name rides on the reader instead, so two updates in
+    /// flight cannot mistake each other's file.
+    Component {
+        id: sieve
+
+        FileView {
+            id: view
+
+            property string name: ""
+
+            printErrors: false
+
+            onLoaded: {
+                try {
+                    root.write(view.name, Settings.snapshot(JSON.parse(view.text())));
+                    root.status = `${view.name} updated.`;
+                } catch (error) {
+                    root.status = `${view.name} is not readable JSON.`;
+                }
+                view.destroy(2000);
+            }
+
+            onLoadFailed: {
+                root.status = `${view.name} could not be read.`;
+                view.destroy(2000);
+            }
         }
     }
 

@@ -43,24 +43,27 @@ Singleton {
     }
 
     /// The wallpaper drawn behind the mode menu and across the picker's header.
+    /// Four knobs each rather than four between them: the same image fills a
+    /// whole card in one window and a strip in the other, so a framing that
+    /// suits the menu rarely suits the picker.
     readonly property QtObject backdrop: QtObject {
         /// 1 is rasi's `url(…, width)`: exactly as wide as the window it fills.
-        readonly property real zoom: Math.max(0.2, Settings.layout.backdropZoom)
+        readonly property real zoom: Math.max(0.2, Settings.value("layout", "backdropZoom"))
         /// Which band of the image shows once it is taller than the strip it is
         /// drawn in. 0 is the top, which is where rofi left it.
-        readonly property real position: Math.max(0, Math.min(1, Settings.layout.backdropPosition))
+        readonly property real position: Math.max(0, Math.min(1, Settings.value("layout", "backdropPosition")))
         /// Frosted glass. 0 leaves the image exactly as rofi drew it, and skips
         /// the render pass entirely.
-        readonly property real blur: Math.max(0, Math.min(1, Settings.layout.backdropBlur))
-        readonly property real dim: Math.max(0, Math.min(1, Settings.layout.backdropDim))
+        readonly property real blur: Math.max(0, Math.min(1, Settings.value("layout", "backdropBlur")))
+        readonly property real dim: Math.max(0, Math.min(1, Settings.value("layout", "backdropDim")))
     }
 
     // ── Mode menu (wallpaperchoise.rasi) ───────────────────────────────
     readonly property QtObject menu: QtObject {
         readonly property real width: Settings.layout.menuWidth
         readonly property real height: Settings.layout.menuHeight
-        readonly property real radius: Settings.shape.windowRadius
-        readonly property real border: Settings.shape.border
+        readonly property real radius: Settings.shape.menuWindowRadius
+        readonly property real border: Settings.shape.menuBorder
 
         /// The white capsule behind the entries: the backgrounds of the elements,
         /// which merge into one rounded bar because they sit edge to edge. rofi
@@ -152,7 +155,11 @@ Singleton {
     // ── Animation ──────────────────────────────────────────────────────
     // rofi drew all of this instantly. Turning `animation.enabled` off gives
     // that back exactly, since every duration below collapses to zero.
-    readonly property real speed: Settings.animation.enabled ? Math.max(0.05, Settings.animation.speed) : 0
+    //
+    // Every one of these is stored twice — see Settings — so a menu you want to
+    // snap open and a picker you want to glide can be asked for at once. Only
+    // the stagger is single, because only the picker has a grid.
+    readonly property real speed: Settings.value("animation", "enabled") ? Math.max(0.05, Settings.value("animation", "speed")) : 0
 
     function duration(base: int): int {
         if (root.speed === 0)
@@ -166,14 +173,14 @@ Singleton {
 
     /// Window entrance, and the matching exit that runs before we hand the
     /// selection back to `lumen`.
-    readonly property int enterDuration: root.duration(Settings.animation.enter)
-    readonly property int exitDuration: root.duration(Settings.animation.exit)
+    readonly property int enterDuration: root.duration(Settings.value("animation", "enter"))
+    readonly property int exitDuration: root.duration(Settings.value("animation", "exit"))
     /// Selection travelling from one element to the next.
-    readonly property int moveDuration: root.duration(Settings.animation.move)
+    readonly property int moveDuration: root.duration(Settings.value("animation", "move"))
     /// Hover feedback and thumbnail fade-in.
-    readonly property int fadeDuration: root.duration(Settings.animation.fade)
+    readonly property int fadeDuration: root.duration(Settings.value("animation", "fade"))
     /// Scrolling, whether from the keyboard or the wheel.
-    readonly property int scrollDuration: root.duration(Settings.animation.scroll)
+    readonly property int scrollDuration: root.duration(Settings.value("animation", "scroll"))
     /// Per-item delay of the grid's staggered entrance, capped so that a long
     /// wallpaper directory does not take a second to appear.
     readonly property int stagger: root.duration(Settings.animation.stagger)
@@ -182,19 +189,19 @@ Singleton {
     /// How far a springy animation overshoots. `extra` is that animation's share
     /// of the bounce, so one setting scales them all.
     function overshoot(extra: real): real {
-        return 1 + extra * Math.max(0, Settings.animation.bounce);
+        return 1 + extra * Math.max(0, Settings.value("animation", "bounce"));
     }
 
     /// The easing those animations use. `Easing.OutBack` still overshoots by a
     /// few percent at the smallest overshoot it accepts, so a bounce of zero
     /// has to change the curve rather than the number to actually be flat.
-    readonly property int springEasing: Settings.animation.bounce > 0 ? Easing.OutBack : Easing.OutCubic
+    readonly property int springEasing: Settings.value("animation", "bounce") > 0 ? Easing.OutBack : Easing.OutCubic
 
     /// Scale of the selected wallpaper. One setting drives every lift in the
     /// windows: `factor` is how many times more a given one grows, so setting
     /// the lift to 1 pins them all flat.
     function liftBy(factor: real): real {
-        return 1 + (Settings.animation.lift - 1) * factor;
+        return 1 + (Settings.value("animation", "lift") - 1) * factor;
     }
 
     readonly property real lift: root.liftBy(1)

@@ -21,6 +21,10 @@ import QtQuick
 /// which the menu draws, and the live preview beside the panel could not show
 /// what half the rows did. `scope` is what each window asks for, and the rows,
 /// the tabs, the title and the reset all follow from it.
+///
+/// It follows the values too. A knob both windows draw is stored twice — see
+/// Settings — and every row here asks for the half belonging to its own window,
+/// so squaring the menu's corners leaves the picker's round.
 Item {
     id: panel
 
@@ -41,83 +45,128 @@ Item {
 
     /// Everything is split across these, because forty-odd rows in one scroll is
     /// a wall. Each tab is short enough to see nearly whole.
+    ///
+    /// Presets comes first, and is where the panel opens: it is the one tab that
+    /// changes everything at once, and the one nobody finds if it sits at the
+    /// far end of a bar of six.
+    ///
+    /// The bar draws the glyph rather than the name — six names fought over the
+    /// width and had to be shrunk to fit, six icons do not — and `label` is what
+    /// the tooltip says, so nothing is lost by not knowing the glyph. They are
+    /// Nerd Font codepoints, written as escapes because the file would otherwise
+    /// carry characters no editor can show.
     readonly property var tabs: panel.menuScope ? [
         {
+            key: "presets",
+            label: "Presets",
+            icon: "\ueb55" // cod-sort_precedence
+        },
+        {
             key: "modes",
-            label: "Entries"
+            label: "Entries",
+            icon: "\uf0ca" // fa-list_ul
         },
         {
             key: "shape",
-            label: "Shape"
+            label: "Shape",
+            icon: "\udb81\udc95" // md-shape_plus
         },
         {
             key: "animation",
-            label: "Motion"
+            label: "Motion",
+            icon: "\udb85\uddb2" // md-motion
         },
         {
             key: "layout",
-            label: "Layout"
+            label: "Layout",
+            icon: "\udb83\udf7f" // md-page_layout_header_footer
         },
         {
             key: "colors",
-            label: "Color"
-        },
-        {
-            key: "presets",
-            label: "Presets"
+            label: "Color",
+            icon: "\uf1fc" // fa-paintbrush
         }
     ] : [
         {
+            key: "presets",
+            label: "Presets",
+            icon: "\ueb55"
+        },
+        {
             key: "shape",
-            label: "Shape"
+            label: "Shape",
+            icon: "\udb81\udc95"
         },
         {
             key: "tags",
-            label: "Tags"
+            label: "Tags",
+            icon: "\uf02c" // fa-tags
         },
         {
             key: "animation",
-            label: "Motion"
+            label: "Motion",
+            icon: "\udb85\uddb2"
         },
         {
             key: "layout",
-            label: "Layout"
+            label: "Layout",
+            icon: "\udb83\udf7f"
         },
         {
             key: "colors",
-            label: "Color"
-        },
-        {
-            key: "presets",
-            label: "Presets"
+            label: "Color",
+            icon: "\uf1fc"
         }
     ]
 
     property int tab: 0
+
+    /// Which tab the cursor is over, or -1. The tooltip below the bar reads it.
+    property int hoveredTab: -1
+
+    /// Set for a moment after the keyboard moves between tabs, so that `tab` and
+    /// `1`…`6` name where they landed the way hovering does. Without it the only
+    /// thing a keyboard user gets from a bar of glyphs is a pill sliding.
+    property bool announcing: false
     property int currentIndex: 0
 
-    readonly property var colorKeys: [
-        {
-            key: "background",
-            label: "Background"
-        },
-        {
-            key: "foreground",
-            label: "Text"
-        },
-        {
-            key: "border",
-            label: "Border"
-        },
-        {
-            key: "selection",
-            label: "Selection"
-        },
-        {
-            key: "thumbBorder",
-            label: "Thumbnail border"
-        }
-    ]
+    /// The palette slots this window can pin, each with the key it is stored
+    /// under here — `background` in the picker, `menuBackground` in the menu.
+    /// The slot is kept alongside because what `auto` is worth is looked up in
+    /// the generated palette, which both windows read under the plain name.
+    ///
+    /// The menu is one slot short: the thumbnail border is a line around a
+    /// thumbnail, and the menu draws none.
+    readonly property var colorKeys: {
+        const slots = [
+            {
+                slot: "background",
+                label: "Background"
+            },
+            {
+                slot: "foreground",
+                label: "Text"
+            },
+            {
+                slot: "border",
+                label: "Border"
+            },
+            {
+                slot: "selection",
+                label: "Selection"
+            }
+        ];
+        if (!panel.menuScope)
+            slots.push({
+                slot: "thumbBorder",
+                label: "Thumbnail border"
+            });
+        return slots.map(entry => ({
+                    slot: entry.slot,
+                    label: entry.label,
+                    key: Settings.scoped("colors", entry.slot, panel.menuScope)
+                }));
+    }
 
     // ── Rows ───────────────────────────────────────────────────────────
 
@@ -153,6 +202,15 @@ Item {
         panel.currentIndex = -1;
         panel.step(1); // land on the first row that is not a heading
         flick.contentY = 0;
+        panel.announcing = true;
+        announce.restart();
+    }
+
+    Timer {
+        id: announce
+
+        interval: 1300
+        onTriggered: panel.announcing = false
     }
 
     Component.onCompleted: {
@@ -169,7 +227,14 @@ Item {
             kind: "header",
             label: label
         });
+        // Everything below names the knob rather than the key: a row asking for
+        // `border` gets the picker's or the mode menu's depending on the window
+        // this panel belongs to, and a knob only one window draws is unaffected.
+        // It is also what `touched` collects, so a Reset can only ever reach the
+        // half of a group its own window put on screen.
+        const scoped = (group, key) => Settings.scoped(group, key, panel.menuScope);
         const slider = (group, key, label, from, to, step, suffix) => {
+            key = scoped(group, key);
             touched.push(key);
             rows.push({
                 kind: "slider",
@@ -183,6 +248,7 @@ Item {
             });
         };
         const toggle = (group, key, label) => {
+            key = scoped(group, key);
             touched.push(key);
             rows.push({
                 kind: "toggle",
@@ -192,6 +258,7 @@ Item {
             });
         };
         const choice = (group, key, label, options) => {
+            key = scoped(group, key);
             touched.push(key);
             rows.push({
                 kind: "choice",
@@ -271,8 +338,9 @@ Item {
                 slider("layout", "thumbPadding", "Padding", 0, 40, 0.5, " px");
             }
 
-            // The same image in both: a strip across the picker's header, and
-            // the whole card behind the mode menu.
+            // The same image in both, framed apart: it is a strip across the
+            // picker's header and the whole card behind the mode menu, so a
+            // zoom that suits one crops the other badly.
             group("Wallpaper backdrop");
             slider("layout", "backdropZoom", "Zoom", 0.5, 3, 0.01, "×");
             slider("layout", "backdropPosition", "Framing", 0, 1, 0.01, "");
@@ -382,6 +450,7 @@ Item {
                 rows.push({
                     kind: "colour",
                     key: colour.key,
+                    slot: colour.slot,
                     label: colour.label
                 });
                 // A pinned colour gets its three channels right underneath, as
@@ -609,6 +678,16 @@ Item {
             // the knobs it shows, not the other panel's half of the group.
             panel.resetTab();
             return true;
+        case Qt.Key_U: {
+            // Only a preset has something to be written over; every other row
+            // ignores it. See SettingPreset for why it is not called `update`.
+            const item = panel.currentWidget();
+            if (item && item.overwrite) {
+                item.overwrite();
+                return true;
+            }
+            return false;
+        }
         case Qt.Key_X:
         case Qt.Key_Delete: {
             // Rows that can throw something away say so; the rest ignore it.
@@ -724,11 +803,11 @@ Item {
                 spacing: 4
 
                 /// Every tab gets the same slice of the bar rather than its own
-                /// width. Four tabs fitted at their natural size; six do not —
-                /// the menu's ran 111px past the edge of the panel and the last
-                /// name fell off it. An equal share is the one rule that holds
-                /// whatever the tab count and whatever the text size is set to,
-                /// and it keeps the sliding indicator a constant width.
+                /// width. Six names could not have it — they ran 111px past the
+                /// edge of the panel — and six glyphs no longer need it, being
+                /// all one width; an equal share is kept because it is the one
+                /// rule that holds whatever the tab count is, and because it
+                /// keeps the sliding indicator a constant width.
                 readonly property real slot: Math.max(24, (tabBar.width - tabRow.spacing * (panel.tabs.length - 1)) / Math.max(1, panel.tabs.length))
 
                 Repeater {
@@ -748,22 +827,16 @@ Item {
                             id: label
 
                             anchors.centerIn: parent
-                            width: parent.width - 8
-                            horizontalAlignment: Text.AlignHCenter
-                            // Turning the text size right up makes six names too
-                            // wide for their slots. Shrinking them to fit reads
-                            // better than cutting them down to `Entr…`; the
-                            // elide is only what happens past the floor.
-                            fontSizeMode: Text.HorizontalFit
-                            minimumPixelSize: 9
-                            elide: Text.ElideRight
-                            text: tabItem.modelData.label
+                            text: tabItem.modelData.icon
                             color: tabItem.current ? Colors.background : Colors.foreground
                             opacity: tabItem.current ? 1 : 0.7
-                            font.family: Style.textFont
-                            // A touch under the rows', so six names sit in the
-                            // bar with room to breathe rather than filling it.
-                            font.pixelSize: Style.textSize * 0.92
+                            // The Nerd Font by name, the way the mode menu's own
+                            // glyphs are asked for: leaving it to fontconfig is
+                            // what gets you a box instead of an icon.
+                            font.family: Style.iconFont
+                            // Half again the rows', because a glyph at the text
+                            // size reads as a smudge rather than as a shape.
+                            font.pixelSize: Style.textSize * 1.5
 
                             Behavior on color {
                                 ColorAnimation {
@@ -775,7 +848,17 @@ Item {
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
+                            hoverEnabled: true
                             onClicked: panel.selectTab(tabItem.index)
+                            onEntered: panel.hoveredTab = tabItem.index
+                            // Guarded: moving from one tab to the next enters the
+                            // new one before it leaves the old, and clearing it
+                            // unconditionally would blank a tooltip that has just
+                            // been asked for.
+                            onExited: {
+                                if (panel.hoveredTab === tabItem.index)
+                                    panel.hoveredTab = -1;
+                            }
                         }
                     }
                 }
@@ -955,6 +1038,7 @@ Item {
                                 width: loader.width
                                 label: line.modelData.label
                                 key: line.modelData.key
+                                slot: line.modelData.slot
                                 selected: line.current
                             }
                         }
@@ -1006,8 +1090,9 @@ Item {
                                 width: loader.width
                                 name: line.modelData.label
                                 selected: line.current
-                                // "Default" is the measurements, not a file.
-                                removable: line.modelData.key !== ""
+                                // "Default" is the measurements, not a file, so
+                                // it has neither an Update nor a cross.
+                                stored: line.modelData.key !== ""
                                 busy: Presets.pending === line.modelData.key && line.modelData.key !== ""
                                 apply: () => {
                                     if (line.modelData.key === "")
@@ -1015,6 +1100,7 @@ Item {
                                     else
                                         Presets.apply(line.modelData.key);
                                 }
+                                revise: () => Presets.overwrite(line.modelData.key)
                                 erase: () => Presets.remove(line.modelData.key)
                             }
                         }
@@ -1044,7 +1130,7 @@ Item {
                                         if (line.modelData.key === "presets") {
                                             if (Presets.status)
                                                 return Presets.status;
-                                            return "A preset is one JSON file in ~/.config/lumen/presets, shaped exactly like settings.json — readable, hand-editable, and worth sending to someone. Applying writes back only what the file holds, so a preset carrying nothing but colors leaves your layout alone. `x` on a row deletes it.";
+                                            return "A preset is one JSON file in ~/.config/lumen/presets, shaped exactly like settings.json — readable, hand-editable, and worth sending to someone. Applying writes back only what the file holds, so a preset carrying nothing but colors leaves your layout alone. Update puts what is on screen into a preset you already have, so tuning one is not saving it again under another name; `u` on a row does the same, and `x` deletes it.";
                                         }
                                         if (Wallreco.status)
                                             return Wallreco.status;
@@ -1117,6 +1203,67 @@ Item {
             x: flick.x + flick.width + 8
             y: flick.y
             height: flick.height
+        }
+
+        /// Says in words what the glyph under the cursor is.
+        ///
+        /// Declared last so that it paints over the rows: it hangs just below
+        /// the bar, which is where the first row of the tab is, and a tooltip
+        /// that appears behind the thing it explains is no tooltip at all.
+        Rectangle {
+            id: tip
+
+            /// Which tab it is speaking for: whatever the cursor is over, and
+            /// otherwise whatever the keyboard has just moved to.
+            readonly property int index: panel.hoveredTab >= 0 ? panel.hoveredTab : (panel.announcing ? panel.tab : -1)
+            readonly property Item target: tip.index >= 0 ? tabRow.children[tip.index] ?? null : null
+
+            /// Latched rather than bound. Both are read from the tab being
+            /// pointed at, and on the way out there is no tab being pointed at —
+            /// bound, the label would empty and the bubble would slide back to
+            /// the left edge while it was still half visible.
+            property string label: ""
+            property real centre: 0
+
+            onTargetChanged: {
+                if (!tip.target)
+                    return;
+                tip.label = panel.tabs[tip.index].label;
+                tip.centre = tabBar.x + tip.target.x + tip.target.width / 2;
+            }
+
+            /// Centred under its tab, and pushed back inside the panel for the
+            /// two at the ends, whose bubbles are wider than their slots.
+            x: Math.max(tabBar.x, Math.min(tip.centre - tip.width / 2, tabBar.x + tabBar.width - tip.width))
+            y: tabBar.y + tabBar.height + 4
+            width: name.implicitWidth + 20
+            height: name.implicitHeight + 10
+            radius: height / 2
+            color: Colors.selected
+            opacity: tip.target ? 1 : 0
+            visible: tip.opacity > 0
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: Style.fadeDuration
+                }
+            }
+            Behavior on x {
+                NumberAnimation {
+                    duration: Style.moveDuration
+                    easing.type: Easing.OutCubic
+                }
+            }
+
+            Text {
+                id: name
+
+                anchors.centerIn: parent
+                text: tip.label
+                color: Colors.background
+                font.family: Style.textFont
+                font.pixelSize: Style.textSize * 0.85
+            }
         }
     }
 }

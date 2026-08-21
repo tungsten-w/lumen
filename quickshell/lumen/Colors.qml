@@ -21,6 +21,11 @@ import Quickshell.Io
 ///
 /// Any colour can be pinned to a fixed value in the settings panel; whatever is
 /// left on `auto` keeps following the wallpaper.
+///
+/// The two windows are coloured separately — the menu can follow matugen while
+/// the picker follows pywal, and either can be pinned without touching the
+/// other. Which half is read is not a property of this file: it is the window
+/// the process was started for, which is what `Settings.value` resolves for it.
 Singleton {
     id: root
 
@@ -80,7 +85,7 @@ Singleton {
     /// The palette being read. A settings file naming one we do not know — hand
     /// written, or left behind by a later version — falls back to pywal, which
     /// is what the picker has drawn since it was a rofi theme.
-    readonly property string activePalette: root.palettes[Settings.colors.palette] ? Settings.colors.palette : "pywal"
+    readonly property string activePalette: root.palettes[Settings.value("colors", "palette")] ? Settings.value("colors", "palette") : "pywal"
 
     onActivePaletteChanged: root.reload()
 
@@ -91,13 +96,14 @@ Singleton {
 
     /// Window background. Its opacity is a setting of its own, because rofi's
     /// was opaque and there is no palette entry for "see through".
-    readonly property color background: Qt.alpha(root.pick(Settings.colors.background, root.autoBackground), Math.max(0, Math.min(1, Settings.colors.opacity)))
-    readonly property color foreground: root.pick(Settings.colors.foreground, root.autoForeground)
+    readonly property color background: Qt.alpha(root.pick(Settings.value("colors", "background"), root.autoBackground), Math.max(0, Math.min(1, Settings.value("colors", "opacity"))))
+    readonly property color foreground: root.pick(Settings.value("colors", "foreground"), root.autoForeground)
     /// Border of the window, of the header and of the search field.
-    readonly property color urgent: root.pick(Settings.colors.border, root.autoUrgent)
+    readonly property color urgent: root.pick(Settings.value("colors", "border"), root.autoUrgent)
     /// Background of the selected element.
-    readonly property color selected: root.pick(Settings.colors.selection, root.autoSelected)
-    /// Border drawn around a thumbnail — a thin gap, unless it is pinned.
+    readonly property color selected: root.pick(Settings.value("colors", "selection"), root.autoSelected)
+    /// Border drawn around a thumbnail — a thin gap, unless it is pinned. The
+    /// one colour with no menu half, since the menu draws no thumbnails.
     readonly property color borderColor: root.pick(Settings.colors.thumbBorder, root.autoBorderColor)
 
     /// The palette as read, ignoring the overrides — the panel shows these under

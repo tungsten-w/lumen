@@ -65,19 +65,21 @@ PanelWindow {
     /// It only shows through once Color → Background opacity is under 1, and it
     /// needs a compositor that speaks `ext-background-effect`; where that is
     /// missing, asking for it is simply ignored.
-    BackgroundEffect.blurRegion: Settings.colors.blur ? blurRegion : null
+    BackgroundEffect.blurRegion: Settings.value("colors", "blur") ? blurRegion : null
 
     Region {
         id: blurRegion
 
         item: card
-        radius: Settings.shape.windowRadius
+        // The corner of whichever window this is, so the frosted patch cannot
+        // end up rounder or squarer than the card it sits under.
+        radius: Settings.value("shape", "windowRadius")
 
         Region {
             // Empty while the panel is folded away, or the blur would sit on
             // its own in the middle of the screen.
             item: win.asideOpen ? aside : null
-            radius: Settings.shape.windowRadius
+            radius: Settings.value("shape", "windowRadius")
         }
     }
 

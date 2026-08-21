@@ -13,6 +13,13 @@ import Quickshell.Io
 ///
 /// The file is written back on every change — the panel has no save button — and
 /// it is watched, so editing it by hand restyles an open picker as you save.
+///
+/// A knob both windows draw is stored twice, the mode menu's copy under the same
+/// name with a `menu` prefix: `shape.border` is the picker's outline and
+/// `shape.menuBorder` the menu's. That is the whole of the split — `scoped`
+/// below turns a name into the one the running window owns, and everything that
+/// reads a shared knob goes through it, so rounding the menu's corners can no
+/// longer square the picker's. Keys only one window draws stay unprefixed.
 Singleton {
     id: root
 
@@ -24,6 +31,22 @@ Singleton {
 
     /// A colour left on this keeps following the palette in `colors.palette`.
     readonly property string auto: "auto"
+
+    /// Which of the two windows this process is drawing.
+    ///
+    /// `lumen` runs `qs` once per prompt, so the mode menu and the picker never
+    /// share a process: the window is a property of the run rather than of a
+    /// component, and `value` below can resolve it on its own instead of the
+    /// forty-odd bindings that read a shared knob each having to be handed a
+    /// scope. Read exactly the way shell.qml reads it, so the two cannot
+    /// disagree — `settings` is the picker with its panel already out, which
+    /// makes anything that is not `menu` the picker's.
+    ///
+    /// It lives here rather than in a singleton of its own because `Scope` is
+    /// already a Quickshell type: a `Scope.qml` beside this one loads without
+    /// complaint and then quietly resolves to theirs, which reads as an empty
+    /// property and hands the mode menu the picker's half of everything.
+    readonly property bool menuWindow: (Quickshell.env("LUMEN_MODE") ?? "menu") === "menu"
 
     /// True between a change and the write that carries it to disk.
     property bool pending: false
@@ -73,6 +96,10 @@ Singleton {
                 file.reload();
         }
 
+        // A file written before the two windows had a knob each is carried
+        // over to the split rather than half reset — see `adopt`.
+        onLoaded: root.adopt()
+
         // First run: write the defaults out, so the file is there to be read,
         // edited by hand, or copied between machines even before the panel has
         // been touched.
@@ -109,6 +136,9 @@ Singleton {
                 property real pillInset: 6.75
                 property real ringInset: 10.5
                 property real ringWidth: 9 // element-text { border: 9px; }
+                /// The menu's half of the two outlines both windows have.
+                property real menuWindowRadius: 20
+                property real menuBorder: 3
             }
 
             /// Sizes and counts.
@@ -141,6 +171,13 @@ Singleton {
                 /// a blurred wallpaper is often too bright to read a field on.
                 property real backdropBlur: 0
                 property real backdropDim: 0
+                /// The menu's half of the backdrop: it fills the whole card
+                /// there and only the header here, so the framing that suits one
+                /// rarely suits the other.
+                property real menuBackdropZoom: 1
+                property real menuBackdropPosition: 0
+                property real menuBackdropBlur: 0
+                property real menuBackdropDim: 0
                 property real entryWidth: 288
                 property real entryHeight: 46.5
                 property real textSize: 16 // font: "Comfortaa 12"
@@ -163,6 +200,18 @@ Singleton {
                 property real bounce: 1
                 /// How much the selected wallpaper grows. 1 is flat.
                 property real lift: 1.012
+                /// The menu's half. Everything above is drawn by both windows —
+                /// only the thumbnail stagger is the picker's alone, since the
+                /// menu has no grid to stagger.
+                property bool menuEnabled: true
+                property real menuSpeed: 1
+                property int menuEnter: 220
+                property int menuExit: 140
+                property int menuMove: 200
+                property int menuFade: 160
+                property int menuScroll: 240
+                property real menuBounce: 1
+                property real menuLift: 1.012
             }
 
             /// `"auto"` follows the wallpaper, anything else is a fixed colour.
@@ -183,6 +232,15 @@ Singleton {
                 /// Asks the compositor to blur what is behind the windows, which
                 /// only shows through once the opacity above is below 1.
                 property bool blur: false
+                /// The menu's half. `thumbBorder` has no twin: it is the line
+                /// round a thumbnail, and the menu draws none.
+                property string menuPalette: "pywal"
+                property string menuBackground: "auto"
+                property string menuForeground: "auto"
+                property string menuBorder: "auto"
+                property string menuSelection: "auto"
+                property real menuOpacity: 1
+                property bool menuBlur: false
             }
         }
     }
@@ -205,7 +263,9 @@ Singleton {
             thumbBorder: 3,
             pillInset: 6.75,
             ringInset: 10.5,
-            ringWidth: 9
+            ringWidth: 9,
+            menuWindowRadius: 20,
+            menuBorder: 3
         },
         layout: {
             pickerWidth: 998,
@@ -225,6 +285,10 @@ Singleton {
             backdropPosition: 0,
             backdropBlur: 0,
             backdropDim: 0,
+            menuBackdropZoom: 1,
+            menuBackdropPosition: 0,
+            menuBackdropBlur: 0,
+            menuBackdropDim: 0,
             entryWidth: 288,
             entryHeight: 46.5,
             textSize: 16,
@@ -240,7 +304,16 @@ Singleton {
             scroll: 240,
             stagger: 18,
             bounce: 1,
-            lift: 1.012
+            lift: 1.012,
+            menuEnabled: true,
+            menuSpeed: 1,
+            menuEnter: 220,
+            menuExit: 140,
+            menuMove: 200,
+            menuFade: 160,
+            menuScroll: 240,
+            menuBounce: 1,
+            menuLift: 1.012
         },
         colors: {
             blur: false,
@@ -250,9 +323,90 @@ Singleton {
             border: "auto",
             selection: "auto",
             thumbBorder: "auto",
-            opacity: 1
+            opacity: 1,
+            menuPalette: "pywal",
+            menuBackground: "auto",
+            menuForeground: "auto",
+            menuBorder: "auto",
+            menuSelection: "auto",
+            menuOpacity: 1,
+            menuBlur: false
         }
     })
+
+    /// The knobs this version split in two, under the name the mode menu's half
+    /// went under.
+    ///
+    /// Written out rather than found by looking for a `menu` prefix, because
+    /// `layout.menuColumns` carries one and was never a half of anything — the
+    /// menu has had its own column count all along, and seeding it from the
+    /// picker's grid would put four columns in a menu of four entries.
+    readonly property var adopted: ({
+        shape: ["menuWindowRadius", "menuBorder"],
+        layout: ["menuBackdropZoom", "menuBackdropPosition", "menuBackdropBlur", "menuBackdropDim"],
+        animation: ["menuEnabled", "menuSpeed", "menuEnter", "menuExit", "menuMove", "menuFade", "menuScroll", "menuBounce", "menuLift"],
+        colors: ["menuPalette", "menuBackground", "menuForeground", "menuBorder", "menuSelection", "menuOpacity", "menuBlur"]
+    })
+
+    /// Carries a settings file written before the split over to it.
+    ///
+    /// Until now the two windows shared one knob, so what is in the file is as
+    /// much what the mode menu has been drawn with as the picker. Left alone, an
+    /// upgrade would hand the menu the rofi defaults and quietly undo however
+    /// long was spent on it: a 60px corner and no border would come back as a
+    /// 20px corner and a 3px one. So a half the file has never heard of starts
+    /// as a copy of the knob it used to be, and only a file that already knows
+    /// about both keeps them apart.
+    ///
+    /// The write this causes puts every key in, so it is a one-time thing rather
+    /// than something that runs on every load.
+    function adopt() {
+        let stored;
+        try {
+            stored = JSON.parse(file.text());
+        } catch (error) {
+            return; // no file yet, or one we cannot read: the defaults stand
+        }
+        if (!stored || typeof stored !== "object")
+            return;
+        for (const group in root.adopted) {
+            const incoming = stored[group];
+            if (!incoming || typeof incoming !== "object")
+                continue;
+            for (const key of root.adopted[group]) {
+                const was = key.charAt(4).toLowerCase() + key.slice(5);
+                if (!(key in incoming) && was in incoming)
+                    adapter[group][key] = incoming[was];
+            }
+        }
+    }
+
+    /// The name a shared knob goes under for one of the two windows.
+    ///
+    /// The mode menu's copy of a knob both windows draw is the same key with a
+    /// `menu` prefix. A key with no such twin in the defaults is drawn by one
+    /// window only and is returned untouched, which is what makes this safe to
+    /// run over every row the panel builds and every value the singletons read
+    /// — nothing has to keep a list of which keys are shared, because the twin
+    /// existing *is* the list.
+    function scoped(group: string, key: string, menu: bool): string {
+        if (!menu)
+            return key;
+        const twin = "menu" + key.charAt(0).toUpperCase() + key.slice(1);
+        const known = root.defaults[group];
+        return (known && twin in known) ? twin : key;
+    }
+
+    /// What a knob is worth in the window this process is drawing.
+    ///
+    /// Style and Colors hold what both windows are drawn with and are built
+    /// once per run, so they resolve the scope themselves rather than being
+    /// handed it — see `menuWindow`. Reading through the subscript keeps the
+    /// bindings live: Qt captures the property behind it just as it would a
+    /// named one.
+    function value(group: string, key: string): var {
+        return adapter[group][root.scoped(group, key, root.menuWindow)];
+    }
 
     /// Puts one whole group back to the rofi measurements.
     function reset(group: string) {
@@ -264,6 +418,8 @@ Singleton {
     /// The panel resets a tab rather than a group, and since the split a tab is
     /// only ever part of one: the mode menu's Shape tab and the picker's are
     /// both the `shape` group, and neither may reset the other window's knobs.
+    /// The keys it hands over are already scoped, so a tab puts back its own
+    /// window's half and leaves the twin where it was.
     function resetKeys(group: string, keys: var) {
         const values = root.defaults[group];
         if (!values)
@@ -281,11 +437,24 @@ Singleton {
     }
 
     /// The whole configuration as a plain object, which is what a preset saves.
-    function snapshot(): var {
+    ///
+    /// Given a `shape` — a preset as it is on disk — only the groups and keys
+    /// that preset already holds come back, carrying what they are worth now.
+    /// That is what makes the panel's *Update* refresh a preset rather than
+    /// replace it: a file holding nothing but `colors` is still a colours-only
+    /// preset afterwards, which is the whole point of having one. Keys the file
+    /// carries that are not ours are dropped on the way, the same way applying
+    /// one skips them.
+    function snapshot(shape: var): var {
         const out = {};
         for (const group in root.defaults) {
+            const held = shape ? shape[group] : null;
+            if (shape && (!held || typeof held !== "object"))
+                continue;
             out[group] = {};
             for (const key in root.defaults[group]) {
+                if (shape && !(key in held))
+                    continue;
                 out[group][key] = adapter[group][key];
             }
         }

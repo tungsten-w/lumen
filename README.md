@@ -66,6 +66,11 @@ day or the season and never think about it again.
 
 ##  Features
 
+<details>
+<summary><b>Everything it does</b> &mdash; one image, the whole desktop, and a picker you can take apart &nbsp;<i>(click to unfold)</i></summary>
+
+<br>
+
 - **Whole-desktop theming** — one image repaints GTK, rofi, tmux, Ghostty,
   Neovim, Spotify, Obsidian, your shell and your lock screen.
 - **Three palettes, one switch** — [pywal](https://github.com/dylanaraps/pywal)
@@ -79,9 +84,9 @@ day or the season and never think about it again.
 - **Vim keys everywhere** — `hjkl`, `gg`/`G`, `Ctrl+d`/`Ctrl+u`, two modes, and a
   block cursor to tell you which one you are in.
 - **A settings panel per window** — the mode menu has its own, the picker has
-  its own, 52 knobs between them: corner radii, animation timings, column counts,
-  blur, colors — every one redrawn **live** on the window next to it, none of
-  them needing a restart.
+  its own, 74 knobs between them and **nothing shared**: corner radii, animation
+  timings, column counts, blur, colors — every one redrawn **live** on the window
+  next to it, none of them needing a restart.
 - **Real blur** — frosted glass over the wallpaper in the header, and compositor
   blur behind the window itself.
 - **Light / dark that means something** — the cursor swaps (Bibata Classic ↔
@@ -96,6 +101,8 @@ day or the season and never think about it again.
   transition takes.
 - **Wallpaper recognition** — a script that reads what is *in* the image
   (animals, colors…). Half-built, and honest about it.
+
+</details>
 
 ---
 
@@ -181,7 +188,10 @@ the rest of the desktop reads — `~/.cache/wal/colors-rofi-dark.rasi` for pywal
 Noctalia — so the picker recolors itself along with everything else, for free,
 forever. **Color ▸ Source** says which of the three it listens to.
 
-### Keys
+<details>
+<summary><b>&nbsp;⌨&nbsp; Keys</b> &mdash; two vim modes, and everything that works from both &nbsp;<i>(click to unfold)</i></summary>
+
+<br>
 
 The picker opens **in insert mode**, so you can type the name of a wallpaper the
 moment the window is up — no mouse, no arrow keys. `hjkl` cannot double as
@@ -214,6 +224,8 @@ switch if you do not want to: arrows, <kbd>Enter</kbd>,
 outside cancels. The mode menu takes `hjkl`, arrows, <kbd>Enter</kbd> and
 <kbd>q</kbd>; it has nothing to type into, so it needs no modes at all.
 
+</details>
+
 <details>
 <summary><b>&nbsp;⚙&nbsp; Settings</b> &mdash; <kbd>Ctrl</kbd>+<kbd>,</kbd>, or type <code>settings</code> in the picker &nbsp;<i>(click to unfold)</i></summary>
 
@@ -239,26 +251,42 @@ is no thumbnail zoom in the menu's panel, and no menu entries in the picker's:
 
 | Tab | The menu's | The picker's |
 |---|---|---|
+| **Presets** | Save the whole configuration under a name, put any of them back, or write your changes into one you already have | The same |
 | **Entries** | Which of the four modes the menu offers | — |
 | **Shape** | Window corner and border, the selected entry's pill and ring | Corners of the window, header, thumbnails and search field; window and thumbnail borders |
+| **Tags** | — | Install [wallreco](https://github.com/tungsten-w/wallreco), or run it to tag new wallpapers and recompute the old ones |
 | **Motion** | Animations on/off, speed, bounce, selection lift, and each duration on its own | The same, plus the grid's thumbnail stagger |
 | **Layout** | Menu size, columns, icon size, wallpaper backdrop | Grid and spacing, thumbnails, backdrop, window and header sizes, search field |
-| **Color** | Which palette to follow, background opacity, blur behind the window, and the five palette colors | The same |
-| **Tags** | — | Install [wallreco](https://github.com/tungsten-w/wallreco), or run it to tag new wallpapers and recompute the old ones |
-| **Presets** | Save the whole configuration under a name, and put any of them back | The same |
+| **Color** | Which palette to follow, background opacity, blur behind the window, and four palette colors | The same, plus the thumbnail border |
 
-Thirty four values for the menu, forty one for the picker, six tabs each — two
+The bar draws **an icon per tab** rather than a name: six names fought over the
+width of the panel and had to be shrunk to fit, six glyphs do not. Hovering one
+names it, and so does moving to it with the keyboard — the name appears under the
+bar for a moment, so <kbd>Tab</kbd> never drops you somewhere you cannot name.
+**Presets** is first, and is where the panel opens: it is the one tab that
+changes everything at once, and the one nobody finds at the far end of a bar.
+
+Thirty three values for the menu, forty one for the picker, six tabs each — two
 of which hold no values at all, only the jobs and the presets below. Each tab is short
 enough to see nearly whole, and on the ones that are not, a bar down the right
-edge shows how much is still under the fold, and drags. The twenty three values
-that appear in both panels — the window's shape, the animations, the palette —
-are there because both windows draw them.
+edge shows how much is still under the fold, and drags.
+
+**Nothing is shared between the two panels.** A knob both windows draw — the
+window's corner and border, every animation, the whole palette, the backdrop's
+framing — is stored twice, the menu's copy under the same name with a `menu`
+prefix: `shape.border` is the picker's outline and `shape.menuBorder` the menu's.
+So the menu can snap open while the picker glides, follow matugen while the
+picker follows pywal, and be square while the picker is round. A settings file
+written before the split is carried over rather than half reset: a `menu` half
+the file has never heard of starts as a copy of the knob it used to be, so
+upgrading leaves both windows looking exactly as they did.
 
 **Presets** are whole configurations you can swap between. Each one is a single
 JSON file in `~/.config/lumen/presets`, shaped exactly like `settings.json`
 itself — so a preset is something you can read, hand-edit, keep in a dotfiles
 repo, or send to someone who liked your setup. *Save this configuration* asks for
-a name and writes all fifty two values; *Apply* puts them back.
+a name and writes all seventy four values — both windows' halves; *Apply* puts
+them back.
 
 `Default` is not a file: it is the original rofi measurements, which is what
 makes it the one preset that can never go missing.
@@ -277,6 +305,16 @@ Keys and groups that are not ours are skipped rather than trusted: these files
 get hand-edited and copied between machines, and one typo should cost you that
 line rather than the whole preset.
 
+*Update*, on a preset's own row, writes what is on screen into that preset — so a
+look you keep tuning stays one preset instead of becoming `rounded`, `rounded 2`
+and `rounded final`. It is the exact inverse of *Apply*: it puts back **only the
+keys that file already holds**, so `midnight` above stays three colour values and
+simply picks up the palette you are looking at now, rather than swelling into a
+whole configuration the first time you touch it. Unlike the cross it does not ask
+twice — it is the button you reach for after every nudge of a slider, and one you
+have to confirm is one you stop using. <kbd>u</kbd> on the row does the same, and
+`Default`, being no file, has neither button.
+
 **Tags** is where [wallreco](https://github.com/tungsten-w/wallreco) lives. It
 writes its tags into the filenames — `sunset.png` becomes
 `sunset-#orange-#warm-#sky.png` — which is exactly what the picker's search field
@@ -289,6 +327,7 @@ back.
 | Panel | |
 |---|---|
 | <kbd>Tab</kbd> / <kbd>1</kbd>…<kbd>6</kbd> | Move between tabs |
+| <kbd>u</kbd> | Write your changes into the preset under the cursor |
 | <kbd>x</kbd> | Delete the preset under the cursor (twice, it asks) |
 | <kbd>j</kbd> / <kbd>k</kbd> | Move through the settings |
 | <kbd>h</kbd> / <kbd>l</kbd> | Change the value (<kbd>Shift</kbd> for ten times the step) |
@@ -340,6 +379,11 @@ LUMEN_QS_CONFIG=/path/shell.qml  # a Quickshell config somewhere else
 
 ##  Expected wallpaper layout
 
+<details>
+<summary><b>The folders it looks in</b>, and how thumbnails are cached &nbsp;<i>(click to unfold)</i></summary>
+
+<br>
+
 `lumen` expects your wallpapers organised like this under `~/Pictures/Wallpapers/`:
 
 ```
@@ -357,9 +401,16 @@ per core, capped at 512px — and are regenerated when the source changes, or wh
 a larger, older cache is found. `lumen --thumbs` builds them all ahead of time and
 sweeps out the ones whose wallpaper is gone.
 
+</details>
+
 ---
 
 ##  Dependencies
+
+<details>
+<summary><b>The tools it drives</b>, and what each one is for &nbsp;<i>(click to unfold)</i></summary>
+
+<br>
 
 | Tool | Role |
 |------|------|
@@ -377,9 +428,18 @@ sweeps out the ones whose wallpaper is gone.
 > ⚠️ The [noctalia](https://github.com/noctalia-dev/noctalia) integration targets **Noctalia Shell v5** (`noctalia msg …`).  
 ⚠️  You can also use [wallreco](https://github.com/tungsten-w/wallreco) to set tags for all your wallpapers in a single command (see [usage](https://github.com/tungsten-w/wallreco#usage))
 
+</details>
+
 ---
 
 ##  Installation
+
+The three lines at the top of this file are the short version. In full:
+
+<details>
+<summary><b>Binary or source</b>, the keybind, and linking the picker's config &nbsp;<i>(click to unfold)</i></summary>
+
+<br>
 
 ### Option 1 — prebuilt binary (recommended)
 
@@ -423,6 +483,8 @@ ln -s "$PWD/quickshell/lumen" ~/.config/quickshell/lumen
 
 If `~/.config/lumen` *is* your clone, there is nothing to do: `lumen` finds the
 config there too.
+
+</details>
 
 ---
 
@@ -470,6 +532,11 @@ Part of my dotfiles: [tungsten-w/.config](https://github.com/tungsten-w/.config)
 
 ##  Roadmap
 
+<details>
+<summary><b>Done, and still to do</b> &nbsp;<i>(click to unfold)</i></summary>
+
+<br>
+
 - [ ] Config file for custom paths (drop the hard-coded `~/Pictures/Wallpapers`)
 - [ ] Proper `install.sh` <--- (im working on it ( ˘͈ ᵕ ˘͈♡))
 - [ ] Finish the wallpaper recognition script
@@ -477,6 +544,8 @@ Part of my dotfiles: [tungsten-w/.config](https://github.com/tungsten-w/.config)
 - [x] Settings panel (Ctrl+, / `lumen --settings`)
 - [x] use rust instead of bash
 - [x] Quickshell
+
+</details>
 
 ---
 

@@ -9,16 +9,21 @@ Item {
     id: row
 
     required property string label
-    /// Key inside `Settings.colors`.
+    /// Key inside `Settings.colors`, already scoped to the window the panel
+    /// belongs to — `background` in the picker, `menuBackground` in the menu.
     required property string key
+    /// Which palette slot the key is a copy of. The two windows store their
+    /// colours apart but read the same generated palette, so what `auto` is
+    /// worth is looked up under the unprefixed name.
+    required property string slot
     property bool selected: false
 
     readonly property bool automatic: Settings.colors[row.key] === Settings.auto
-    readonly property color shown: row.automatic ? Colors.autoValue(row.key) : Settings.colors[row.key]
+    readonly property color shown: row.automatic ? Colors.autoValue(row.slot) : Settings.colors[row.key]
 
     /// Pins the colour to what is on screen, or hands it back to the palette.
     function flip() {
-        Settings.colors[row.key] = row.automatic ? Colors.autoValue(row.key).toString() : Settings.auto;
+        Settings.colors[row.key] = row.automatic ? Colors.autoValue(row.slot).toString() : Settings.auto;
     }
 
     implicitHeight: 44
