@@ -72,7 +72,43 @@ fn restore_current_wallpaper() {
     // since been deleted is skipped rather than copied as an error.
     let kept = home_dir().join("Pictures/Wallpapers/current_wallpaper.jpg");
     if kept.exists() {
-        let _ = fs::copy(&kept, shown);
+        cache_wallpaper_still(&kept);
+    }
+}
+
+/// Keep the menu's still-image cache as a real PNG, including when the chosen
+/// wallpaper is a GIF or another format. The picker can separately use the
+/// original path to animate GIF backgrounds.
+fn cache_wallpaper_still(wallpaper: &Path) {
+    if wallpaper
+        .extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("png"))
+    {
+        if let Err(error) = fs::copy(wallpaper, CURRENT_WALLPAPER) {
+            eprintln!("Could not cache wallpaper {}: {error}", wallpaper.display());
+        }
+        return;
+    }
+
+    let temporary = format!("{CURRENT_WALLPAPER}.tmp.png");
+    let mut first_frame = wallpaper.as_os_str().to_os_string();
+    first_frame.push("[0]");
+    let converted = Command::new("magick")
+        .arg(first_frame)
+        .arg(&temporary)
+        .status()
+        .is_ok_and(|status| status.success());
+    if converted {
+        if let Err(error) = fs::rename(&temporary, CURRENT_WALLPAPER) {
+            eprintln!("Could not cache wallpaper {}: {error}", wallpaper.display());
+            let _ = fs::remove_file(&temporary);
+        }
+    } else {
+        eprintln!(
+            "Could not convert wallpaper {} to PNG (ImageMagick needed)",
+            wallpaper.display()
+        );
+        let _ = fs::remove_file(&temporary);
     }
 }
 
@@ -447,16 +483,41 @@ fn reload_spotify() {
 /// password.
 const BRAVE_POLICY: &str = "/etc/brave/policies/managed/color.json";
 
-/// The colour pywal took from the wallpaper, as `#rrggbb`.
-///
-/// pywal rather than matugen because `wal` runs on every change whatever the
-/// picker has been told to draw itself from, and because this side of `lumen`
-/// deliberately knows nothing about settings.json.
-fn wal_background() -> Option<String> {
-    let raw = fs::read_to_string(home_dir().join(".cache/wal/colors.json")).ok()?;
+/// The classic palette's background, as `#rrggbb`.
+fn classic_background(wallust: bool) -> Option<String> {
+    let file = if wallust {
+        ".cache/wallust/colors.json"
+    } else {
+        ".cache/wal/colors.json"
+    };
+    let raw = fs::read_to_string(home_dir().join(file)).ok()?;
     let json: serde_json::Value = serde_json::from_str(&raw).ok()?;
     let colour = json.get("special")?.get("background")?.as_str()?;
     (colour.len() == 7 && colour.starts_with('#')).then(|| colour.to_string())
+}
+
+/// Run each classic provider used by either window. Older settings without a
+/// classic source keep the previous pywal behavior.
+fn classic_generators(settings: Option<&serde_json::Value>) -> (bool, bool) {
+    let colors = settings.and_then(|value| value.get("colors"));
+    let picker = colors
+        .and_then(|value| value.get("palette"))
+        .and_then(|value| value.as_str())
+        .unwrap_or("pywal");
+    let menu = colors
+        .and_then(|value| value.get("menuPalette"))
+        .and_then(|value| value.as_str())
+        .unwrap_or("pywal");
+    let wallust = picker == "wallust" || menu == "wallust";
+    let pywal = picker == "pywal" || menu == "pywal" || !wallust;
+    (pywal, wallust)
+}
+
+fn selected_classic_generators() -> (bool, bool) {
+    let settings = fs::read_to_string(home_dir().join(".config/lumen/settings.json"))
+        .ok()
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok());
+    classic_generators(settings.as_ref())
 }
 
 /// The policy Brave is handed, for one colour.
@@ -479,11 +540,11 @@ fn brave_policy(colour: &str) -> String {
 ///
 /// Only the accent is ours to set. This is Material You seeded from one colour,
 /// not a stylesheet.
-fn reload_brave() {
+fn reload_brave(wallust: bool) {
     if !is_running("brave") {
         return;
     }
-    let Some(colour) = wal_background() else {
+    let Some(colour) = classic_background(wallust) else {
         return;
     };
 
@@ -562,11 +623,13 @@ fn is_running(process_name: &str) -> bool {
     false
 }
 
-/// apply all (awww, pywal, hyprpanel, obsidian...)
+/// Apply wallpaper and themes.
 fn apply_all(wallpaper: &Path, dark: bool) {
     // Everything the theming tools write from here on is newer than this.
     let started = SystemTime::now();
     let wal_flags: Vec<&str> = if dark { vec!["-q"] } else { vec!["-l", "-q"] };
+    let wallust_palette = if dark { "dark" } else { "light" };
+    let (run_pywal, run_wallust) = selected_classic_generators();
     let matugen_mode = if dark { "dark" } else { "light" };
     let (obs_base, obs_theme, relaunch_obs) = if dark {
         ("dark", "obsidian", true)
@@ -622,22 +685,50 @@ fn apply_all(wallpaper: &Path, dark: bool) {
         }));
     }
 
-    // Pywal
+    // Classic palette provider(s). Both run only when the menu and picker use
+    // different classic sources.
     {
         let wallpaper = wallpaper.to_path_buf();
         let wal_flags: Vec<String> = wal_flags.into_iter().map(String::from).collect();
         handles.push(thread::spawn(move || {
             thread::sleep(TRANSITION_GUARD); // stay off the CPU while awww animates
-            let status = Command::new("wal")
-                .arg("-i")
-                .arg(&wallpaper)
-                .args(&wal_flags)
-                .status();
-            if !status.map(|s| s.success()).unwrap_or(false) {
-                eprintln!("Erreur pywal.");
+            if run_pywal {
+                let status = Command::new("wal")
+                    .arg("-i")
+                    .arg(&wallpaper)
+                    .args(&wal_flags)
+                    .status();
+                if !status.map(|s| s.success()).unwrap_or(false) {
+                    eprintln!("Erreur pywal.");
+                }
             }
-            // Follows `wal` because it reads what `wal` has just written.
-            reload_brave();
+            if run_wallust {
+                let status = Command::new("wallust")
+                    .arg("run")
+                    .arg(&wallpaper)
+                    .args(["--palette", wallust_palette])
+                    .status();
+                if !status.map(|s| s.success()).unwrap_or(false) {
+                    eprintln!("Erreur wallust.");
+                } else {
+                    if let Some(hook) = std::env::var_os("LUMEN_WALLUST_HOOK") {
+                        let hook_status = Command::new(hook)
+                            .env("LUMEN_DARK_MODE", if dark { "dark" } else { "light" })
+                            .env("LUMEN_WALLPAPER", &wallpaper)
+                            .status();
+                        if !hook_status.map(|s| s.success()).unwrap_or(false) {
+                            eprintln!("Le hook Wallust a échoué.");
+                        }
+                    }
+                    let cache = home_dir().join(".cache/wallust");
+                    if !cache.join("colors-rofi-dark.rasi").is_file()
+                        || !cache.join("colors.json").is_file()
+                    {
+                        eprintln!("Wallust: configurez les templates Lumen dans ~/.config/wallust/wallust.toml.");
+                    }
+                }
+            }
+            reload_brave(run_wallust);
         }));
     }
 
@@ -645,7 +736,7 @@ fn apply_all(wallpaper: &Path, dark: bool) {
     {
         let wallpaper = wallpaper.to_path_buf();
         handles.push(thread::spawn(move || {
-            let _ = fs::copy(&wallpaper, CURRENT_WALLPAPER);
+            cache_wallpaper_still(&wallpaper);
         }));
     }
 
@@ -663,31 +754,33 @@ fn apply_all(wallpaper: &Path, dark: bool) {
                 .arg(home_dir().join(".config/matugen/config.toml"))
                 .args(["--prefer", "saturation", "-q"])
                 .status();
-
         }));
     }
 
     // Noctalia + Spicetify
     {
         let wallpaper = wallpaper.to_path_buf();
+        let skip_noctalia = std::env::var("LUMEN_SKIP_NOCTALIA").as_deref() == Ok("1");
         handles.push(thread::spawn(move || {
-            if !is_running("noctalia") {
-                let _ = Command::new("nohup")
-                    .args(["noctalia", "-d"])
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .spawn();
-                thread::sleep(Duration::from_secs(3));
-            }
+            if !skip_noctalia {
+                if !is_running("noctalia") {
+                    let _ = Command::new("nohup")
+                        .args(["noctalia", "-d"])
+                        .stdout(Stdio::null())
+                        .stderr(Stdio::null())
+                        .spawn();
+                    thread::sleep(Duration::from_secs(3));
+                }
 
-            let mode = if dark { "dark" } else { "light" };
-            let _ = Command::new("noctalia")
-                .args(["msg", "theme-mode-set", mode])
-                .status();
-            let _ = Command::new("noctalia")
-                .args(["msg", "wallpaper-set"])
-                .arg(&wallpaper)
-                .status();
+                let mode = if dark { "dark" } else { "light" };
+                let _ = Command::new("noctalia")
+                    .args(["msg", "theme-mode-set", mode])
+                    .status();
+                let _ = Command::new("noctalia")
+                    .args(["msg", "wallpaper-set"])
+                    .arg(&wallpaper)
+                    .status();
+            }
 
             if is_running("spotify") {
                 // Spotify's colours are not ours to write: Noctalia's own
@@ -858,7 +951,9 @@ fn run_quickshell(config: &Path, mode: &str, items: Option<&str>) -> Option<Stri
         .env("LUMEN_RESULT", &result);
     // Every window that draws a backdrop wants this, so it goes out on every
     // launch rather than only the ones that show one.
-    if let Some(path) = current_wallpaper_path(&home_dir().join("Pictures/Wallpapers/current_wallpaper.jpg")) {
+    if let Some(path) =
+        current_wallpaper_path(&home_dir().join("Pictures/Wallpapers/current_wallpaper.jpg"))
+    {
         command.env("LUMEN_CURRENT_WALLPAPER", path);
     }
     if let Some(path) = &items_file {
@@ -950,7 +1045,7 @@ fn take_auto_lock() {
         let _ = Command::new("kill").args(["-9", &pid]).status();
     }
 
-    for tool in ["wal -i", "matugen image"] {
+    for tool in ["wal -i", "wallust run", "matugen image"] {
         let _ = Command::new("pkill").args(["-9", "-f", tool]).status();
     }
 
@@ -1132,6 +1227,23 @@ mod tests {
     use super::*;
 
     #[test]
+    fn classic_provider_selection() {
+        assert_eq!(classic_generators(None), (true, false));
+        let settings = serde_json::json!({"colors": {
+            "palette": "wallust", "menuPalette": "wallust"
+        }});
+        assert_eq!(classic_generators(Some(&settings)), (false, true));
+        let mixed = serde_json::json!({"colors": {
+            "palette": "wallust", "menuPalette": "pywal"
+        }});
+        assert_eq!(classic_generators(Some(&mixed)), (true, true));
+        let material = serde_json::json!({"colors": {
+            "palette": "matugen", "menuPalette": "noctalia"
+        }});
+        assert_eq!(classic_generators(Some(&material)), (true, false));
+    }
+
+    #[test]
     fn saison_matches_bash_case() {
         for m in [12, 1, 2] {
             assert_eq!(saison_for_month(m), "hiver");
@@ -1189,7 +1301,10 @@ mod tests {
         assert_eq!(read_reload(pushed), Reload::Pushed);
         assert_eq!(read_reload(set_up), Reload::SetUp);
         // The whole first pass, both lines together, reads the same way.
-        assert_eq!(read_reload(&format!("{restarting}\n{set_up}")), Reload::SetUp);
+        assert_eq!(
+            read_reload(&format!("{restarting}\n{set_up}")),
+            Reload::SetUp
+        );
 
         // The two must never be confused: the whole point is asking again after
         // one of them and not after the other.

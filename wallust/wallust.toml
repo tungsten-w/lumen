@@ -1,0 +1,5 @@
+# Add these entries to your existing ~/.config/wallust/wallust.toml, or copy
+# this file there if you do not already have a Wallust config.
+[templates]
+lumen_rofi = { template = 'lumen-rofi.rasi', target = '~/.cache/wallust/colors-rofi-dark.rasi' }
+lumen_json = { template = 'lumen-colors.json', target = '~/.cache/wallust/colors.json' }

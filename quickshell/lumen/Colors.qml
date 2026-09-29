@@ -9,14 +9,15 @@ import Quickshell.Io
 /// Three of them run on every wallpaper change, and each leaves a rasi file
 /// behind:
 ///
-///     ~/.cache/wal/colors-rofi-dark.rasi   <- pywal, in rofi's own vocabulary
+///     ~/.cache/wal/colors-rofi-dark.rasi   <- pywal
+///     ~/.cache/wallust/colors-rofi-dark.rasi <- wallust
 ///     ~/.config/rofi/colors.rasi           <- matugen, Material You
 ///     ~/.config/rofi/noctalia.rasi         <- noctalia
 ///
 /// The first two are what `wallpaper.rasi` and `wallpaperchoise.rasi` `@import`,
 /// so parsing the files themselves rather than keeping a copy of the palette
 /// means the Quickshell picker recolors itself on every wallpaper change for
-/// free, and can never drift away from the rofi version. Which of the three is
+/// free, and can never drift away from the rofi version. Which source is
 /// read is a setting — `palettes` below is what each one is worth.
 ///
 /// Any colour can be pinned to a fixed value in the settings panel; whatever is
@@ -57,6 +58,13 @@ Singleton {
     /// one.
     readonly property var palettes: ({
             pywal: {
+                background: "background",
+                foreground: "foreground",
+                urgent: "urgent-background",
+                selected: "selected-normal-background",
+                thumbBorder: "border-color"
+            },
+            wallust: {
                 background: "background",
                 foreground: "foreground",
                 urgent: "urgent-background",
@@ -124,7 +132,7 @@ Singleton {
         return root.autoForeground;
     }
 
-    // All three are preloaded rather than only the one in use: switching source
+    // All sources are preloaded rather than only the one in use: switching source
     // in the panel then recolors the picker on the same frame, with no read.
     FileView {
         id: walColors
@@ -132,6 +140,14 @@ Singleton {
         preload: true
         blockLoading: true // read once at startup, so a blocking read is fine
         printErrors: false // a missing file just means "keep the fallbacks"
+    }
+
+    FileView {
+        id: wallustColors
+        path: `${Quickshell.env("HOME")}/.cache/wallust/colors-rofi-dark.rasi`
+        preload: true
+        blockLoading: true
+        printErrors: false
     }
 
     FileView {
@@ -152,6 +168,8 @@ Singleton {
 
     function paletteSource(name: string): string {
         switch (name) {
+        case "wallust":
+            return wallustColors.text();
         case "matugen":
             return matugenColors.text();
         case "noctalia":

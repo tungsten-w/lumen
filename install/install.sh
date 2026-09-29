@@ -42,6 +42,7 @@ DRY_RUN=0
 WANTED_REF=""
 SRC=""
 AUR=""
+WANT_WALLUST=0
 
 # ── Saying things ─────────────────────────────────────────────────────
 # gum when it is there, plain text when it is not: the script has to be able to
@@ -260,6 +261,7 @@ readonly REQUIRED=(
 )
 
 readonly OPTIONAL=(
+    "wallust|wallust wallust-bin|wallust|Another classic color source"
     "noctalia|noctalia-shell noctalia-git|noctalia|Theming the Noctalia shell"
     "spicetify|spicetify-cli|spicetify|Recolouring Spotify"
 )
@@ -306,6 +308,7 @@ install_dependencies() {
         IFS='|' read -r label candidates probe why <<<"$row"
 
         if have_dep "$probe"; then
+            [[ "$label" == "wallust" ]] && WANT_WALLUST=1
             skip "$label — already here"
             continue
         fi
@@ -322,6 +325,8 @@ install_dependencies() {
             warn "$label — no package found under: $candidates"
             continue
         fi
+
+        [[ "$label" == "wallust" ]] && WANT_WALLUST=1
 
         say "$label — $found ($origin) · $why"
         if [[ "$origin" == "repo" ]]; then
@@ -547,6 +552,31 @@ link_config() {
         warn "Quickshell config not linked; lumen has nothing left to draw with."
 }
 
+setup_wallust() {
+    (( WANT_WALLUST )) || command -v wallust >/dev/null 2>&1 || return 0
+
+    step "Wallust templates"
+    local dir="${XDG_CONFIG_HOME:-$HOME/.config}/wallust"
+    run mkdir -p "$dir/templates" "$HOME/.cache/wallust"
+    for name in lumen-rofi.rasi lumen-colors.json; do
+        if [[ ! -e "$dir/templates/$name" && ! -L "$dir/templates/$name" ]]; then
+            run ln -s "$SRC/wallust/templates/$name" "$dir/templates/$name"
+        else
+            skip "$name already exists"
+        fi
+    done
+
+    if [[ ! -e "$dir/wallust.toml" ]]; then
+        run cp "$SRC/wallust/wallust.toml" "$dir/wallust.toml"
+        ok "Wallust config created"
+    elif ! grep -q 'lumen_rofi' "$dir/wallust.toml" ||
+         ! grep -q 'lumen_json' "$dir/wallust.toml"; then
+        warn "Add the two [templates] entries from $SRC/wallust/wallust.toml to $dir/wallust.toml."
+    else
+        skip "Lumen's Wallust template entries already present"
+    fi
+}
+
 # ── Done ──────────────────────────────────────────────────────────────
 
 summary() {
@@ -604,6 +634,7 @@ main() {
     build_lumen
     make_wallpaper_tree
     link_config
+    setup_wallust
     summary
 }
 

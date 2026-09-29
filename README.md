@@ -45,7 +45,7 @@ it through every app that will listen, then flips the whole system to light or
 dark to match.
 
 ```
-   wallpaper  ─►  matugen / pywal / noctalia  ─►  palette extracted
+   wallpaper  ─►  matugen / pywal or wallust / noctalia  ─►  palette extracted
        │                                     │
        └──────────────►  palette propagated across:
                          GTK · rofi · tmux · Ghostty · Spicetify
@@ -75,11 +75,12 @@ day or the season and never think about it again.
 
 - **Whole-desktop theming** — one image repaints GTK, rofi, tmux, Ghostty,
   Neovim, Spotify, Obsidian, your shell and your lock screen.
-- **Three palettes, one switch** — [pywal](https://github.com/dylanaraps/pywal)
-  for the classic sixteen, [matugen](https://github.com/InioX/matugen) for
-  Material You, and [Noctalia](https://github.com/noctalia-dev/noctalia)'s own.
-  All three run on every wallpaper and feed different apps; the picker draws
-  itself from whichever one you point it at in **Color ▸ Source**.
+- **Four palette sources** — [pywal](https://github.com/dylanaraps/pywal) or
+  [Wallust](https://codeberg.org/explosion-mental/wallust) for classic sixteen
+  colors, [matugen](https://github.com/InioX/matugen) for Material You, and
+  [Noctalia](https://github.com/noctalia-dev/noctalia)'s own. Pick the source
+  for each window in **Color ▸ Source**. Wallust runs when either window uses it;
+  pywal remains the default for existing setups.
 - **An animated picker** drawn with [Quickshell](https://quickshell.org): a
   thumbnail grid that filters as you type, slides its selection around, and fades
   each thumbnail in as it decodes.
@@ -148,11 +149,11 @@ movement rofi could not do: the window springs open, the selection slides from
 one wallpaper to the next, the grid rearranges itself as you type, and thumbnails
 fade in as they decode. Every one of those numbers is then yours to change.
 
-Colors are not duplicated anywhere. The QML reads the very same palette files
-the rest of the desktop reads — `~/.cache/wal/colors-rofi-dark.rasi` for pywal,
-`~/.config/rofi/colors.rasi` for matugen, `~/.config/rofi/noctalia.rasi` for
-Noctalia — so the picker recolors itself along with everything else, for free,
-forever. **Color ▸ Source** says which of the three it listens to.
+Colors are not duplicated anywhere. The QML reads generated palette files:
+`~/.cache/wal/colors-rofi-dark.rasi` for pywal,
+`~/.cache/wallust/colors-rofi-dark.rasi` for Wallust,
+`~/.config/rofi/colors.rasi` for matugen, and
+`~/.config/rofi/noctalia.rasi` for Noctalia. **Color ▸ Source** selects one.
 
 <details>
 <summary><b>&nbsp;⌨&nbsp; Keys</b> &mdash; two vim modes, and everything that works from both &nbsp;<i>(click to unfold)</i></summary>
@@ -397,7 +398,7 @@ once *Background opacity* is under 1, and it asks over `ext-background-effect`; 
 compositor that does not speak it simply ignores the request. Hyprland 0.56 does.
 
 **Colors** start on `auto`, which means "whatever the palette made of the current
-wallpaper". **Source** picks which palette that is — pywal, matugen or Noctalia —
+wallpaper". **Source** picks which palette that is — pywal, Wallust, matugen or Noctalia —
 and the five colors under it move together when you change it. Pressing
 <kbd>Enter</kbd> on one pins it to what is on screen right now and opens hue,
 saturation and lightness under it; pressing <kbd>Enter</kbd> again hands it back
@@ -504,7 +505,7 @@ you go hunting for it.
 
 | Setting | Menu | Picker |
 |---|:---:|:---:|
-| Palette source (pywal / matugen / noctalia) | ✅ | ✅ |
+| Palette source (pywal / Wallust / matugen / noctalia) | ✅ | ✅ |
 | Background opacity | ✅ | ✅ |
 | Blur behind the window | ✅ | ✅ |
 | Background / Text / Border / Selection color | ✅ | ✅ |
@@ -558,6 +559,7 @@ sweeps out the ones whose wallpaper is gone.
 | [`awww`](https://github.com/LGFae/swww) | Wallpaper daemon + transitions |
 | [`matugen`](https://github.com/InioX/matugen) | Material You palette generation |
 | [`pywal`](https://github.com/dylanaraps/pywal) | Classic palette generation |
+| [Wallust](https://codeberg.org/explosion-mental/wallust) | Alternative classic palette generation *(optional)* |
 | `imagemagick` | Thumbnail generation + GIF handling |
 | [`quickshell`](https://quickshell.org) | The picker and the settings panel |
 | `jq` | Editing Obsidian JSON configs |
@@ -587,7 +589,7 @@ Everything it asks can be answered with Enter:
 
 1. **Install `gum`, and an AUR helper** — only if you have neither. gum draws
    the prompts; without it they are plain text and the run carries on.
-2. **Which optional pieces** you want — Noctalia theming, Spotify recolouring.
+2. **Which optional pieces** you want — Wallust, Noctalia theming, Spotify recolouring.
    Space to pick, Enter to move on.
 3. **Which version** to build — the latest release, or `main`.
 4. **Where you keep your wallpapers.** Anywhere is fine: it makes `dark/`,
@@ -622,6 +624,29 @@ git -C ~/.local/share/lumen pull && ~/.local/share/lumen/install/install.sh
 Every step it takes, every path it touches and how to undo each one is written
 out in **[install/README.md](install/README.md)**.
 
+### Wallust as a color source
+
+Install `wallust`. The installer links the two templates from
+[`wallust/templates/`](wallust/templates) into `~/.config/wallust/templates/`.
+For a manual install, copy them there. If you have no Wallust config yet, the
+installer creates one from [`wallust/wallust.toml`](wallust/wallust.toml).
+If you already have one, add its two `[templates]` entries to your existing
+section. These entries generate the Rofi palette for Lumen's picker
+and a JSON palette for Brave without touching pywal's cache.
+
+In both the menu and picker settings panels, choose **Color → Source → wallust**.
+Lumen then runs `wallust run` with a dark or light palette when you change the
+wallpaper. It skips `wal` when neither window uses pywal. If the two windows
+choose different classic sources, Lumen runs both. Other applications can use
+the same Wallust run by adding templates to your Wallust config.
+
+An executable path in `LUMEN_WALLUST_HOOK` runs after a successful Wallust
+update. Lumen passes `LUMEN_DARK_MODE=dark` or `light` and the image path in
+`LUMEN_WALLPAPER`, so a desktop setup can refresh its own themes.
+Set `LUMEN_SKIP_NOCTALIA=1` when that hook handles a different shell and you
+do not want Lumen to launch or message upstream Noctalia. Spotify reload still
+runs when Spotify is open.
+
 ### By hand — any distribution
 
 <details>
@@ -629,7 +654,7 @@ out in **[install/README.md](install/README.md)**.
 
 <br>
 
-You will need these on your `PATH` first: `awww`, `matugen`, `pywal`,
+You will need these on your `PATH` first: `awww`, `matugen`, `pywal` or `wallust`,
 `imagemagick`, `quickshell`, `jq`, plus a Nerd Font and Comfortaa. The
 [dependency table](#dependencies) above says what each is for.
 

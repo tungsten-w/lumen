@@ -247,11 +247,9 @@ Singleton {
 
             /// `"auto"` follows the wallpaper, anything else is a fixed colour.
             property JsonObject colors: JsonObject {
-                /// Which generator's palette the `auto` colours read. All three
-                /// are rewritten on every wallpaper change, so this picks the
-                /// look rather than whether the colours follow along: `pywal`
-                /// for the classic sixteen the rofi themes drew, `matugen` for
-                /// Material You, `noctalia` for the shell's own.
+                /// Which generator's palette the `auto` colours read. `pywal`
+                /// and `wallust` provide classic colors, `matugen` provides
+                /// Material You, and `noctalia` provides the shell's own.
                 property string palette: "pywal"
                 property string background: "auto"
                 property string foreground: "auto"

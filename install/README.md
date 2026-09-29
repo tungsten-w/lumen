@@ -96,7 +96,7 @@ not in your repositories is simply reported and skipped.
 
 ### 4 — Dependencies
 
-Ten required, two optional (`noctalia`, `spicetify`) offered through a
+Ten required, three optional (`wallust`, `noctalia`, `spicetify`) offered through a
 `gum choose` you can leave empty.
 
 Two things are worth knowing here.
@@ -129,6 +129,7 @@ thinks it installed:
 | awww | `awww` `awww-git` | `awww` | Setting the wallpaper, and the transition |
 | matugen | `matugen` `matugen-bin` | `matugen` | Material You palettes |
 | pywal | `python-pywal16` `python-pywal` | `wal` | The classic sixteen colours |
+| *wallust* | `wallust` `wallust-bin` | `wallust` | Alternative classic colors |
 | imagemagick | `imagemagick` | `magick` | Thumbnails, and GIF handling |
 | quickshell | `quickshell` `quickshell-git` | `qs` | The picker and the settings panel |
 | jq | `jq` | `jq` | Editing Obsidian's JSON |
@@ -211,6 +212,12 @@ One symlink out of the checkout:
 |---|---|
 | `~/.config/quickshell/lumen` | `$SRC/quickshell/lumen` |
 
+If Wallust is installed, the installer also links Lumen's two Wallust templates
+into `~/.config/wallust/templates/` and creates `~/.cache/wallust/`. It creates
+`~/.config/wallust/wallust.toml` only when no config exists. If you already have
+one, it leaves the file alone and prints the two entries to add from
+`$SRC/wallust/wallust.toml`.
+
 A path that is already the right link is left alone. A path that is a link
 somewhere else asks before being repointed. **A real file or folder you wrote is
 never overwritten** — it is moved to `<name>.bak` and only with your say-so.
@@ -233,6 +240,9 @@ is already right.
 | `~/.local/share/lumen` | The checkout, unless `--src` | `rm -rf` |
 | `~/.cargo/bin/lumen` | The binary | `cargo uninstall lumen` |
 | `~/.config/quickshell/lumen` | Symlink | `rm` |
+| `~/.config/wallust/templates/lumen-*` | Symlinks, if Wallust is present | `rm` |
+| `~/.config/wallust/wallust.toml` | Created only if absent | Keep or remove as you prefer |
+| `~/.cache/wallust` | Generated palette cache | `rm -rf` |
 | `~/Pictures/Wallpapers` | Folder, or a symlink to yours | `rm` the link |
 | *your wallpaper folder* | The `dark/ light/ season-time/` tree | Yours |
 | System packages | Through `pacman` and the AUR helper | `pacman -Rns` |

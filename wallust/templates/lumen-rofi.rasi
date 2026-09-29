@@ -1,0 +1,7 @@
+* {
+    background: {{background}};
+    foreground: {{foreground}};
+    border-color: {{background}};
+    urgent-background: {{color1}};
+    selected-normal-background: {{color2}};
+}

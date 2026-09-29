@@ -644,13 +644,15 @@ Item {
             toggle("colors", "blur", "Blur behind the window");
 
             group("Palette");
-            // Which generator the five colours below are read from. All three
-            // are rewritten on every wallpaper change; this only picks the one
-            // the picker listens to.
+            // Which generator the five colours below are read from.
             choice("colors", "palette", "Source", [
                 {
                     value: "pywal",
                     label: "pywal"
+                },
+                {
+                    value: "wallust",
+                    label: "wallust"
                 },
                 {
                     value: "matugen",
