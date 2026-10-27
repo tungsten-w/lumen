@@ -251,30 +251,114 @@ fn generate_thumbnails(pairs: &[(&PathBuf, PathBuf)]) {
         return;
     }
 
+    in_parallel(&todo, |(img, thumb)| {
+        let _ = Command::new("magick")
+            .env("MAGICK_THREAD_LIMIT", "1")
+            .arg(format!("{}[0]", img.display()))
+            .arg("-thumbnail")
+            .arg(format!("{THUMB_MAX_EDGE}x{THUMB_MAX_EDGE}>"))
+            .arg("-strip")
+            .arg(thumb)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    });
+}
+
+/// Runs `work` over `items`, one item at a time per core.
+fn in_parallel<T: Sync>(items: &[T], work: impl Fn(&T) + Sync) {
     let next = AtomicUsize::new(0);
-    let workers = parallelism().min(todo.len());
+    let workers = parallelism().min(items.len());
 
     thread::scope(|scope| {
         for _ in 0..workers {
             scope.spawn(|| {
-                loop {
-                    let index = next.fetch_add(1, Ordering::Relaxed);
-                    let Some((img, thumb)) = todo.get(index) else {
-                        break;
-                    };
-                    let _ = Command::new("magick")
-                        .env("MAGICK_THREAD_LIMIT", "1")
-                        .arg(format!("{}[0]", img.display()))
-                        .arg("-thumbnail")
-                        .arg(format!("{THUMB_MAX_EDGE}x{THUMB_MAX_EDGE}>"))
-                        .arg("-strip")
-                        .arg(thumb)
-                        .stdout(Stdio::null())
-                        .stderr(Stdio::null())
-                        .status();
+                while let Some(item) = items.get(next.fetch_add(1, Ordering::Relaxed)) {
+                    work(item);
                 }
             });
         }
+    });
+}
+
+/// How many colours a wallpaper's palette is reduced to for colour search.
+const PALETTE_SIZE: u32 = 6;
+
+/// Where a thumbnail's palette is cached: right beside it, as `name.colors`.
+fn palette_path(thumb: &Path) -> PathBuf {
+    thumb.with_extension("colors")
+}
+
+fn palette_is_stale(palette: &Path, thumb: &Path) -> bool {
+    let (Ok(p), Ok(t)) = (palette.metadata(), thumb.metadata()) else {
+        return true;
+    };
+    p.modified().unwrap_or(SystemTime::UNIX_EPOCH) < t.modified().unwrap_or(SystemTime::UNIX_EPOCH)
+}
+
+/// Reads `magick … histogram:info:-` into `(#rrggbb, share)` pairs, largest
+/// share first. Lines look like `  2273: (14.2,22.7,39.4) #0E1727 srgb(…)`.
+fn parse_histogram(text: &str) -> Vec<(String, f64)> {
+    let mut colours: Vec<(String, f64)> = text
+        .lines()
+        .filter_map(|line| {
+            let (count, rest) = line.split_once(':')?;
+            let count: f64 = count.trim().parse().ok()?;
+            let hex = rest.split_whitespace().find(|word| word.starts_with('#'))?;
+            // An image with alpha comes back as #RRGGBBAA; the alpha is noise here.
+            let hex = hex.get(..7)?;
+            Some((hex.to_lowercase(), count))
+        })
+        .collect();
+    let total: f64 = colours.iter().map(|(_, count)| count).sum();
+    if total <= 0.0 {
+        return Vec::new();
+    }
+    for (_, share) in &mut colours {
+        *share /= total;
+    }
+    colours.sort_by(|a, b| b.1.total_cmp(&a.1));
+    colours
+}
+
+/// The cached palette, as written by `generate_palettes`: `#rrggbb share` per line.
+fn read_palette(palette: &Path) -> Vec<(String, f64)> {
+    fs::read_to_string(palette)
+        .unwrap_or_default()
+        .lines()
+        .filter_map(|line| {
+            let (hex, share) = line.split_once(' ')?;
+            Some((hex.to_string(), share.parse().ok()?))
+        })
+        .collect()
+}
+
+/// Computes the palette of every thumbnail that lacks a current one. Read off
+/// the thumbnail rather than the wallpaper: a 64px copy is all a dominant
+/// colour needs, and the thumbnail is already decoded small.
+fn generate_palettes(thumbs: &[&Path]) {
+    let todo: Vec<&Path> = thumbs
+        .iter()
+        .copied()
+        .filter(|thumb| thumb.is_file() && palette_is_stale(&palette_path(thumb), thumb))
+        .collect();
+
+    in_parallel(&todo, |thumb| {
+        let Ok(output) = Command::new("magick")
+            .env("MAGICK_THREAD_LIMIT", "1")
+            .arg(thumb)
+            .args(["-resize", "64x64", "-colors", &PALETTE_SIZE.to_string()])
+            .args(["-format", "%c", "histogram:info:-"])
+            .stderr(Stdio::null())
+            .output()
+        else {
+            return;
+        };
+        let lines: String = parse_histogram(&String::from_utf8_lossy(&output.stdout))
+            .iter()
+            .map(|(hex, share)| format!("{hex} {share:.4}\n"))
+            .collect();
+        let _ = fs::write(palette_path(thumb), lines);
     });
 }
 
@@ -302,6 +386,7 @@ fn wallpaper_entries(dir: &Path) -> Vec<(PathBuf, PathBuf)> {
         .collect();
 
     generate_thumbnails(&pairs);
+    generate_palettes(&pairs.iter().map(|(_, thumb)| thumb.as_path()).collect::<Vec<_>>());
 
     pairs
         .into_iter()
@@ -318,6 +403,10 @@ fn items_json(entries: &[(PathBuf, PathBuf)]) -> String {
                 "name": img.file_name()?.to_string_lossy(),
                 "path": img.to_string_lossy(),
                 "thumb": thumb.to_string_lossy(),
+                "colors": read_palette(&palette_path(thumb))
+                    .into_iter()
+                    .map(|(hex, share)| serde_json::json!({"hex": hex, "weight": share}))
+                    .collect::<Vec<_>>(),
             }))
         })
         .collect();
@@ -1284,7 +1373,13 @@ fn prune_thumbnails(thumb_dir: &Path, keep: &[(&PathBuf, PathBuf)]) -> (usize, u
     let (mut count, mut bytes) = (0, 0);
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.extension().is_none_or(|e| e != "png") || live.contains(path.as_path()) {
+        // A palette lives and dies with the thumbnail it was read from.
+        let owner = match path.extension().and_then(|e| e.to_str()) {
+            Some("png") => path.clone(),
+            Some("colors") => path.with_extension("png"),
+            _ => continue,
+        };
+        if live.contains(owner.as_path()) {
             continue;
         }
         let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
@@ -1312,6 +1407,7 @@ fn warm_thumbnails(dir: &Path) {
         })
         .collect();
     generate_thumbnails(&pairs);
+    generate_palettes(&pairs.iter().map(|(_, thumb)| thumb.as_path()).collect::<Vec<_>>());
     let (pruned, bytes) = prune_thumbnails(&thumb_dir, &pairs);
     println!(
         "{} : {} images, {} orphelins supprimés ({:.1} Mo)",
@@ -1799,6 +1895,21 @@ color_scheme           = Comfy
         assert!(!thumb_is_stale(&small, &img));
 
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn parse_histogram_normalises_and_sorts_by_share() {
+        let text = "\
+           100: (14,22,39) #0E1727 srgb(5%,8%,15%)
+           300: (29,48,82) #1D3052FF srgba(11%,18%,32%,1)
+garbage line
+";
+        let palette = parse_histogram(text);
+        assert_eq!(palette.len(), 2);
+        assert_eq!(palette[0].0, "#1d3052");
+        assert!((palette[0].1 - 0.75).abs() < 1e-9);
+        assert_eq!(palette[1].0, "#0e1727");
+        assert!(parse_histogram("").is_empty());
     }
 
     #[test]

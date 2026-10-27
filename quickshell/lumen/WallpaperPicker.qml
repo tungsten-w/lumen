@@ -64,6 +64,45 @@ OverlayWindow {
     property var wallpapers: []
     /// The ones the search field currently keeps.
     property var matches: []
+    /// The colours the search field understood, as `ColorSearch.parse` reads
+    /// them. The grid is ranked by these rather than filtered.
+    property var colorTerms: []
+    /// The colour words already turned into chips. A colour word stays text
+    /// while it is being typed — "red" may yet become "redwood" — and becomes
+    /// a chip once a space ends it, so the field never says it twice.
+    property var colorTokens: []
+
+    /// Turns every finished colour word of the field into a chip. Only runs on
+    /// a trailing space, which is what finishes a word; it rewrites the field
+    /// only when it found one, so its own rewrite does not loop.
+    function tokenize(text: string): bool {
+        if (!/\s$/.test(text))
+            return false;
+        const words = text.trim().split(/\s+/).filter(word => word.length > 0);
+        const found = [];
+        const kept = [];
+        for (const word of words) {
+            const colour = ColorSearch.parse(word.toLowerCase());
+            if (colour && !win.colorTokens.some(token => token.word === colour.word))
+                found.push(colour);
+            else if (!colour)
+                kept.push(word);
+        }
+        if (kept.length === words.length)
+            return false;
+        win.colorTokens = win.colorTokens.concat(found);
+        search.text = kept.length > 0 ? kept.join(" ") + " " : "";
+        return true;
+    }
+
+    /// Backspace at the very start of the field takes back the last chip.
+    function untokenize(): bool {
+        if (win.colorTokens.length === 0 || search.cursorPosition > 0 || search.selectedText.length > 0)
+            return false;
+        win.colorTokens = win.colorTokens.slice(0, -1);
+        win.filter(search.text);
+        return true;
+    }
     property int currentIndex: 0
 
     /// True only while the grid is first filling in. Thumbnails that show up
@@ -87,6 +126,8 @@ OverlayWindow {
         onLoaded: {
             const parsed = JSON.parse(items.text());
             const found = parsed.items ?? [];
+            for (const wallpaper of found)
+                wallpaper.palette = ColorSearch.prepare(wallpaper.colors);
             // Reordered, never mixed: this is still only whatever folder
             // `lumen` scanned to build the file — dark, light, one of your
             // own — just not always led with the same handful of thumbnails.
@@ -138,12 +179,48 @@ OverlayWindow {
 
     /// rofi's default matcher: every whitespace-separated term has to appear
     /// somewhere in the entry, case-insensitively.
+    ///
+    /// Except colour words. Those never filter anything out; they reorder what
+    /// the other terms kept, best match first, by the palette `lumen` read off
+    /// each thumbnail — so a wallpaper nobody tagged `#blue` still comes up for
+    /// "blue". A name that does carry the word gets a nudge on top.
     function filter(query: string) {
+        // The rewrite re-enters here with the chip already made.
+        if (win.tokenize(query))
+            return;
+
         const terms = query.toLowerCase().split(/\s+/).filter(term => term.length > 0);
-        win.matches = terms.length === 0 ? win.wallpapers : win.wallpapers.filter(wallpaper => {
+        const colours = win.colorTokens.slice();
+        const words = [];
+        for (const term of terms) {
+            const colour = ColorSearch.parse(term);
+            if (colour)
+                colours.push(colour);
+            else
+                words.push(term);
+        }
+        win.colorTerms = colours;
+
+        const kept = words.length === 0 ? win.wallpapers : win.wallpapers.filter(wallpaper => {
             const name = wallpaper.name.toLowerCase();
-            return terms.every(term => name.includes(term));
+            return words.every(term => name.includes(term));
         });
+
+        if (colours.length === 0) {
+            win.matches = kept;
+        } else {
+            // Several colours multiply: "blue pink" wants both, not either.
+            const ranked = kept.map((wallpaper, index) => {
+                const name = wallpaper.name.toLowerCase();
+                let score = 1;
+                for (const colour of colours)
+                    score *= ColorSearch.fit(wallpaper.palette, colour.target) + (name.includes(colour.word) ? 0.3 : 0);
+                return { wallpaper: wallpaper, score: score, index: index };
+            });
+            // The index breaks ties, so equal scores keep the folder's order.
+            ranked.sort((a, b) => b.score - a.score || a.index - b.index);
+            win.matches = ranked.map(entry => entry.wallpaper);
+        }
         win.currentIndex = 0;
         grid.scrollTo(0);
     }
@@ -350,6 +427,9 @@ OverlayWindow {
             return true;
         }
 
+        if (event.key === Qt.Key_Backspace)
+            return win.untokenize();
+
         return false;
     }
 
@@ -434,7 +514,7 @@ OverlayWindow {
 
                 // Widens a little while it holds a query, so it is obvious the
                 // grid is filtered rather than short.
-                scale: search.text.length > 0 ? 1.02 : 1
+                scale: search.text.length > 0 || win.colorTokens.length > 0 ? 1.02 : 1
                 Behavior on scale {
                     NumberAnimation {
                         duration: Style.fadeDuration
@@ -442,11 +522,63 @@ OverlayWindow {
                     }
                 }
 
+                /// Says the query was read as colours: one swatch per colour
+                /// word, so "blue" is plainly a colour and not a filename.
+                Row {
+                    id: colourChip
+
+                    anchors.left: parent.left
+                    anchors.leftMargin: Style.picker.entryPadding
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 6
+                    visible: win.colorTokens.length > 0
+
+                    Repeater {
+                        model: win.colorTokens
+
+                        Rectangle {
+                            required property var modelData
+
+                            height: Style.textSize * 1.5
+                            width: chipRow.implicitWidth + height * 0.7
+                            radius: height / 2
+                            color: Qt.alpha(Colors.foreground, 0.08)
+                            border.width: 1
+                            border.color: Qt.alpha(Colors.foreground, 0.2)
+
+                            Row {
+                                id: chipRow
+
+                                anchors.centerIn: parent
+                                spacing: 5
+
+                                Rectangle {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: Style.textSize * 0.8
+                                    height: width
+                                    radius: width / 2
+                                    color: modelData.swatch
+                                    border.width: 1
+                                    border.color: Qt.alpha(Colors.foreground, 0.35)
+                                }
+
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: modelData.word
+                                    color: Colors.foreground
+                                    font.family: Style.textFont
+                                    font.pixelSize: Style.textSize * 0.8
+                                }
+                            }
+                        }
+                    }
+                }
+
                 TextInput {
                     id: search
 
                     anchors.fill: parent
-                    anchors.leftMargin: Style.picker.entryPadding
+                    anchors.leftMargin: Style.picker.entryPadding + (colourChip.visible ? colourChip.width + 8 : 0)
                     anchors.rightMargin: Style.picker.entryPadding
                     verticalAlignment: TextInput.AlignVCenter
                     clip: true
@@ -518,7 +650,7 @@ OverlayWindow {
                         text: Style.picker.placeholder
                         color: Colors.foreground
                         font: search.font
-                        opacity: search.text.length === 0 ? 0.55 : 0
+                        opacity: search.text.length === 0 && win.colorTokens.length === 0 ? 0.55 : 0
 
                         Behavior on opacity {
                             NumberAnimation {
@@ -567,6 +699,33 @@ OverlayWindow {
             }
         }
 
+        /// The grid's wheel and trackpad scrolling. A sibling laid over it
+        /// rather than a handler inside it: the GridView is not interactive
+        /// and hands its children to its moving content item, neither of which
+        /// a wheel can be trusted to get through. It holds nothing but the
+        /// handler, so clicks and hovers still reach the thumbnails below.
+        Item {
+            x: grid.x
+            y: grid.y
+            z: 1
+            width: grid.width
+            height: grid.height
+
+            WheelHandler {
+                // The dark-or-light question sits over the grid; it is modal.
+                enabled: win.pendingPick === ""
+                onWheel: event => {
+                    // A trackpad reports pixels and scrolls 1:1; a wheel
+                    // reports notches (120 each), which glide.
+                    if (event.pixelDelta.y !== 0)
+                        grid.scrollTo(grid.headedTo - event.pixelDelta.y, false);
+                    else
+                        grid.scrollTo(grid.headedTo - event.angleDelta.y);
+                    event.accepted = true;
+                }
+            }
+        }
+
         /// `listview { columns: 3; spacing: 10px; }`
         GridView {
             id: grid
@@ -593,7 +752,10 @@ OverlayWindow {
             }
 
             Behavior on contentY {
+                enabled: grid.gliding
+
                 NumberAnimation {
+                    id: glide
                     duration: Style.scrollDuration
                     easing.type: Easing.OutCubic
                 }
@@ -602,25 +764,31 @@ OverlayWindow {
             readonly property int visibleRows: Math.max(1, Math.floor(height / cellHeight))
             readonly property real maxContentY: Math.max(0, contentHeight - height)
 
-            function scrollTo(y: real) {
-                contentY = Math.max(0, Math.min(grid.maxContentY, y));
+            /// Where the grid is headed, which mid-glide is not where it is.
+            /// Steps add to this rather than to `contentY`: each one restarts
+            /// the glide, and stacking them on the half-way position lost most
+            /// of every wheel notch — and nearly all of a trackpad swipe.
+            property real targetY: 0
+            /// Off for a trackpad, whose own stream of small steps is already
+            /// smooth and only lags behind an animation chasing it.
+            property bool gliding: true
+
+            readonly property real headedTo: glide.running ? grid.targetY : grid.contentY
+
+            function scrollTo(y: real, animated = true) {
+                grid.targetY = Math.max(0, Math.min(grid.maxContentY, y));
+                grid.gliding = animated;
+                contentY = grid.targetY;
             }
 
             /// Scrolls just far enough to bring `index` fully into view.
             function reveal(index: int) {
                 const top = Math.floor(index / Style.picker.columns) * grid.cellHeight;
                 const bottom = top + Style.picker.elementHeight;
-                if (top < grid.contentY)
+                if (top < grid.headedTo)
                     grid.scrollTo(top);
-                else if (bottom > grid.contentY + grid.height)
+                else if (bottom > grid.headedTo + grid.height)
                     grid.scrollTo(bottom - grid.height);
-            }
-
-            WheelHandler {
-                onWheel: event => {
-                    grid.scrollTo(grid.contentY - event.angleDelta.y);
-                    event.accepted = true;
-                }
             }
 
             // Filtering rearranges the grid instead of redrawing it.
@@ -769,6 +937,36 @@ OverlayWindow {
                         Behavior on opacity {
                             NumberAnimation {
                                 duration: Style.fadeDuration
+                            }
+                        }
+                    }
+
+                    /// The palette a colour search ranks by, along the bottom
+                    /// edge, each colour as wide as its share of the image.
+                    /// Only there while a colour is being searched for.
+                    Row {
+                        anchors.bottom: parent.bottom
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        height: 8
+                        opacity: win.colorTerms.length > 0 ? 0.95 : 0
+                        visible: opacity > 0
+
+                        Behavior on opacity {
+                            NumberAnimation {
+                                duration: Style.fadeDuration
+                            }
+                        }
+
+                        Repeater {
+                            model: element.modelData.colors ?? []
+
+                            Rectangle {
+                                required property var modelData
+
+                                width: thumbnail.width * modelData.weight
+                                height: parent.height
+                                color: modelData.hex
                             }
                         }
                     }
