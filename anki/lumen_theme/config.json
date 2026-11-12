@@ -1,0 +1,12 @@
+{
+    "animations": true,
+    "card_font": "Adwaita Sans",
+    "follow_lumen_mode": true,
+    "font": "Adwaita Sans",
+    "poll_ms": 1500,
+    "qt_theme": true,
+    "restyle_cards": true,
+    "wallpaper": false,
+    "wallpaper_blur": 24,
+    "wallpaper_dim": 0.62
+}

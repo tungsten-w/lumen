@@ -2,3 +2,7 @@
 /lumen/lumen
 settings.json
 *.bak
+/anki/lumen_theme/user_files/*
+!/anki/lumen_theme/user_files/README.txt
+/anki/lumen_theme/meta.json
+__pycache__/

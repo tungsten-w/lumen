@@ -49,7 +49,7 @@ dark to match.
        │                                     │
        └──────────────►  palette propagated across:
                          GTK · rofi · tmux · Ghostty · Spicetify
-                         cursor · Noctalia Shell · Obsidian · hyprlock
+                         cursor · Noctalia Shell · Obsidian · Anki · hyprlock
 ```
 
 No more editing five config files by hand every time you change your background.
@@ -74,7 +74,7 @@ day or the season and never think about it again.
 <br>
 
 - **Whole-desktop theming** — one image repaints GTK, rofi, tmux, Ghostty,
-  Neovim, Spotify, Obsidian, your shell and your lock screen.
+  Neovim, Spotify, Obsidian, Anki, your shell and your lock screen.
 - **Four palette sources** — [pywal](https://github.com/dylanaraps/pywal) or
   [Wallust](https://codeberg.org/explosion-mental/wallust) for classic sixteen
   colors, [matugen](https://github.com/InioX/matugen) for Material You, and
@@ -95,6 +95,10 @@ day or the season and never think about it again.
 - **Light / dark that means something** — the cursor swaps (Bibata Classic ↔
   Ice), Obsidian switches base theme, Noctalia flips mode, Spotify reloads its
   colors without restarting.
+- **Anki, dressed to match** — an add-on that repaints Anki from the same
+  palette, live: glass deck cards, due counts as pills, glowing answer buttons,
+  cards on a frosted panel, and optionally the wallpaper behind the main window.
+  See **[Anki](#anki)**.
 - **Smooth wallpaper transitions** through [`awww`](https://github.com/LGFae/swww).
 - **Set and forget** — `lumen --time` and `lumen --season` pick for you, with no
   prompt at all, ready for a timer.
@@ -723,6 +727,45 @@ If `~/.config/lumen` *is* your clone, there is nothing to do: `lumen` finds the
 config there too.
 
 </details>
+
+---
+
+##  Anki
+
+`anki/lumen_theme` is an Anki add-on (tested on 26.09) that paints Anki with
+your wallpaper's palette, and follows it every time `lumen` runs — no restart.
+
+- **One palette, everywhere.** Noctalia writes `user_files/colors.css` from
+  `anki/noctalia-anki.css`; the add-on maps Anki's own colour variables onto it,
+  so the web pages *and* the native Qt windows (browser, menus, preferences)
+  change together. Light and dark follow Lumen's mode.
+- **The wallpaper behind the main window**, off by default (`wallpaper`): blurred once and cut in three, so
+  the toolbar, the page and the bottom bar line up as one image.
+- **Deck list as glass cards** that rise in one after another and lift on hover;
+  new / learning / due counts as coloured pills.
+- **Reviewer**: the card on a frosted panel, a gradient divider, the answer
+  rising in under it; *Show answer* as a gradient pill, and every answer button
+  in its own colour, glowing in it.
+- **Gradient titles** on the overview and the congratulations screen, a halo
+  behind the `anki_avatar` add-on if you use it, and the stats calendar
+  recoloured onto the palette.
+
+The installer links it into `~/.local/share/Anki2/addons21` and adds the
+Noctalia template (`~/.config/noctalia/anki.toml`). By hand:
+
+```bash
+ln -s "$PWD/anki/lumen_theme" ~/.local/share/Anki2/addons21/lumen_theme
+cat > ~/.config/noctalia/anki.toml <<EOF
+[theme.templates.user.lumen_anki]
+input_path = "$PWD/anki/noctalia-anki.css"
+output_path = "$PWD/anki/lumen_theme/user_files/colors.css"
+EOF
+noctalia msg config-reload && noctalia msg templates-apply
+```
+
+Options (wallpaper, blur, dim, fonts, motion, restyling cards…) are under
+**Tools ▸ Add-ons ▸ Lumen ▸ Config**; each is described in `config.md`.
+If your note types carry their own design, turn `restyle_cards` off.
 
 ---
 

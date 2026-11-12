@@ -1,0 +1,32 @@
+/* Fallback palette, used until noctalia has written user_files/colors.css. */
+:root {
+  --lm-primary: #e4679b;
+  --lm-on-primary: #25181e;
+  --lm-primary-container: #851443;
+  --lm-on-primary-container: #f2d9e3;
+  --lm-secondary: #d6675c;
+  --lm-on-secondary: #25181e;
+  --lm-secondary-container: #6a1d16;
+  --lm-on-secondary-container: #f2dbd9;
+  --lm-tertiary: #cca266;
+  --lm-on-tertiary: #25181e;
+  --lm-tertiary-container: #64461b;
+  --lm-on-tertiary-container: #f2e8d9;
+  --lm-error: #882e53;
+  --lm-on-error: #cebcc3;
+  --lm-error-container: #3c1022;
+  --lm-on-error-container: #f2d9e3;
+  --lm-surface: #29141d;
+  --lm-on-surface: #f3f2f2;
+  --lm-surface-variant: #371b26;
+  --lm-on-surface-variant: #b6afb2;
+  --lm-surface-container-lowest: #150a0e;
+  --lm-surface-container-low: #221118;
+  --lm-surface-container: #452130;
+  --lm-surface-container-high: #3e1e2b;
+  --lm-surface-container-highest: #4c2535;
+  --lm-outline: #716268;
+  --lm-outline-variant: #756169;
+  --lm-shadow: #29141d;
+  --lm-inverse-surface: #e8e3e5;
+}

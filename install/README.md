@@ -218,6 +218,22 @@ into `~/.config/wallust/templates/` and creates `~/.cache/wallust/`. It creates
 one, it leaves the file alone and prints the two entries to add from
 `$SRC/wallust/wallust.toml`.
 
+If Noctalia is installed, and its saved settings have it **not** draw the
+wallpaper, the installer asks to turn that on. Noctalia only shows the wallpaper
+in its panels (the control center banner, the glass behind them) when it draws
+the wallpaper itself, and Lumen already hands it every new one. Noctalia's own
+wallpaper rotation is turned off at the same time, otherwise it would swap the
+wallpaper behind Lumen's back. Only those two `enabled` keys in
+`~/.local/state/noctalia/settings.toml` change, and a copy is kept beside it as
+`settings.toml.bak-lumen`. A fresh Noctalia already draws the wallpaper, so
+there is nothing to ask.
+
+Noctalia's copy is only there for its panels: the wallpaper on screen stays
+awww's. Both sit on the background layer, though, and Noctalia starts later, so
+its copy would cover awww's. The installer prints the line that fixes it,
+`awww-daemon --layer bottom`, for your Hyprland autostart. It is *printed*,
+not written, for the same reason as the keybind.
+
 A path that is already the right link is left alone. A path that is a link
 somewhere else asks before being repointed. **A real file or folder you wrote is
 never overwritten** — it is moved to `<name>.bak` and only with your say-so.
@@ -243,6 +259,7 @@ is already right.
 | `~/.config/wallust/templates/lumen-*` | Symlinks, if Wallust is present | `rm` |
 | `~/.config/wallust/wallust.toml` | Created only if absent | Keep or remove as you prefer |
 | `~/.cache/wallust` | Generated palette cache | `rm -rf` |
+| `~/.local/state/noctalia/settings.toml` | Two `[wallpaper]` keys, only if you say yes | Restore `settings.toml.bak-lumen` |
 | `~/Pictures/Wallpapers` | Folder, or a symlink to yours | `rm` the link |
 | *your wallpaper folder* | The `dark/ light/ season-time/` tree | Yours |
 | System packages | Through `pacman` and the AUR helper | `pacman -Rns` |

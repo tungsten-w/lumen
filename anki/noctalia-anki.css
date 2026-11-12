@@ -1,0 +1,34 @@
+/* Lumen × Anki palette, written by noctalia on every wallpaper change.
+ * Do not edit the generated copy: edit ~/.config/lumen/anki/noctalia-anki.css.
+ * The add-on reads one `--lm-<name>: #rrggbb;` per line, nothing else. */
+:root {
+  --lm-primary: {{colors.primary.default.hex}};
+  --lm-on-primary: {{colors.on_primary.default.hex}};
+  --lm-primary-container: {{colors.primary_container.default.hex}};
+  --lm-on-primary-container: {{colors.on_primary_container.default.hex}};
+  --lm-secondary: {{colors.secondary.default.hex}};
+  --lm-on-secondary: {{colors.on_secondary.default.hex}};
+  --lm-secondary-container: {{colors.secondary_container.default.hex}};
+  --lm-on-secondary-container: {{colors.on_secondary_container.default.hex}};
+  --lm-tertiary: {{colors.tertiary.default.hex}};
+  --lm-on-tertiary: {{colors.on_tertiary.default.hex}};
+  --lm-tertiary-container: {{colors.tertiary_container.default.hex}};
+  --lm-on-tertiary-container: {{colors.on_tertiary_container.default.hex}};
+  --lm-error: {{colors.error.default.hex}};
+  --lm-on-error: {{colors.on_error.default.hex}};
+  --lm-error-container: {{colors.error_container.default.hex}};
+  --lm-on-error-container: {{colors.on_error_container.default.hex}};
+  --lm-surface: {{colors.surface.default.hex}};
+  --lm-on-surface: {{colors.on_surface.default.hex}};
+  --lm-surface-variant: {{colors.surface_variant.default.hex}};
+  --lm-on-surface-variant: {{colors.on_surface_variant.default.hex}};
+  --lm-surface-container-lowest: {{colors.surface_container_lowest.default.hex}};
+  --lm-surface-container-low: {{colors.surface_container_low.default.hex}};
+  --lm-surface-container: {{colors.surface_container.default.hex}};
+  --lm-surface-container-high: {{colors.surface_container_high.default.hex}};
+  --lm-surface-container-highest: {{colors.surface_container_highest.default.hex}};
+  --lm-outline: {{colors.outline.default.hex}};
+  --lm-outline-variant: {{colors.outline_variant.default.hex}};
+  --lm-shadow: {{colors.shadow.default.hex}};
+  --lm-inverse-surface: {{colors.inverse_surface.default.hex}};
+}

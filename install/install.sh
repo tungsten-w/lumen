@@ -577,6 +577,98 @@ setup_wallust() {
     fi
 }
 
+setup_anki() {
+    local addons="${XDG_DATA_HOME:-$HOME/.local/share}/Anki2/addons21"
+    command -v anki >/dev/null 2>&1 || [[ -d "$addons" ]] || return 0
+
+    step "Anki"
+    link_into "$SRC/anki/lumen_theme" "$addons/lumen_theme" "Anki add-on" || return 0
+
+    command -v noctalia >/dev/null 2>&1 || {
+        warn "Noctalia not found: the Anki add-on keeps its fallback palette."
+        return 0
+    }
+    # Noctalia reads every .toml in its config folder, so the template gets a
+    # file of its own rather than an edit to one of yours.
+    local toml="${XDG_CONFIG_HOME:-$HOME/.config}/noctalia/anki.toml"
+    if [[ -e "$toml" ]]; then
+        skip "Noctalia template for Anki already present"
+    elif (( DRY_RUN )); then
+        say "would write $toml"
+    else
+        mkdir -p "$(dirname "$toml")"
+        cat > "$toml" <<TOML
+# Added by Lumen so Anki follows the Noctalia palette (lumen_theme add-on).
+[theme.templates.user.lumen_anki]
+input_path = "$SRC/anki/noctalia-anki.css"
+output_path = "$SRC/anki/lumen_theme/user_files/colors.css"
+TOML
+        ok "Noctalia template for Anki → $toml"
+    fi
+    run noctalia msg config-reload >/dev/null 2>&1 || true
+    run noctalia msg templates-apply >/dev/null 2>&1 || true
+    say "Restart Anki once to load the add-on."
+}
+
+# Prints `enabled` from one table of Noctalia's settings.toml, or nothing.
+noctalia_enabled() {
+    local file="$1" table="$2"
+    awk -v want="[$table]" '
+        /^[[:space:]]*\[/ { gsub(/[[:space:]]/, ""); inside = ($0 == want); next }
+        inside && /^[[:space:]]*enabled[[:space:]]*=/ { sub(/.*=[[:space:]]*/, ""); print; exit }
+    ' "$file"
+}
+
+setup_noctalia_wallpaper() {
+    command -v noctalia >/dev/null 2>&1 || return 0
+
+    step "Noctalia wallpaper"
+    # Noctalia only puts the wallpaper in its panels — the control center
+    # banner, the glass behind them — when it draws the wallpaper itself. Lumen
+    # hands it every new one with `wallpaper-set`, so all it needs is to be on.
+    #
+    # Settings made from Noctalia's own panel live here and win over any .toml
+    # in its config folder, so a file of our own would change nothing.
+    local toml="${XDG_STATE_HOME:-$HOME/.local/state}/noctalia/settings.toml"
+    if [[ ! -e "$toml" ]]; then
+        skip "Noctalia has no saved settings; its defaults already draw the wallpaper"
+        awww_on_top
+        return 0
+    fi
+
+    local drawn rotates
+    drawn=$(noctalia_enabled "$toml" wallpaper)
+    rotates=$(noctalia_enabled "$toml" wallpaper.automation)
+    if [[ "$drawn" != false && "$rotates" != true ]]; then
+        skip "Noctalia already draws the wallpaper"
+        awww_on_top
+        return 0
+    fi
+
+    # Its rotation would swap the wallpaper behind Lumen's back the moment the
+    # drawing comes on, so the two go together.
+    confirm "Let Noctalia draw the wallpaper, so its panels show it (and stop its own rotation)?" || return 0
+    run cp "$toml" "$toml.bak-lumen"
+    run sed -i \
+        -e '/^\[wallpaper\]/,/^\[/{s/^enabled[[:space:]]*=[[:space:]]*false/enabled = true/}' \
+        -e '/^[[:space:]]*\[wallpaper\.automation\]/,/^[[:space:]]*\[/{s/enabled[[:space:]]*=[[:space:]]*true/enabled = false/}' \
+        "$toml"
+    run noctalia msg config-reload >/dev/null 2>&1 || true
+    ok "Noctalia draws the wallpaper (backup: $toml.bak-lumen)"
+    awww_on_top
+}
+
+# Noctalia starts after awww and is created again on every reload, so on a
+# shared layer its wallpaper ends up over awww's — drawn its own way, `fit` and
+# all. One layer up, awww's stays the one on screen whatever the order.
+awww_on_top() {
+    say ""
+    say "Start awww one layer up, so the wallpaper on screen stays Lumen's:"
+    say ""
+    say "  exec-once = awww-daemon --layer bottom"
+    say ""
+}
+
 # ── Done ──────────────────────────────────────────────────────────────
 
 summary() {
@@ -635,6 +727,8 @@ main() {
     make_wallpaper_tree
     link_config
     setup_wallust
+    setup_anki
+    setup_noctalia_wallpaper
     summary
 }
 

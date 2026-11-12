@@ -1,0 +1,719 @@
+/* Lumen × Anki.
+ *
+ * Colours come from two places, both injected by __init__.py:
+ *   --lm-*        the wallpaper's palette, straight from noctalia;
+ *   --fg, --canvas, --state-new…  Anki's own variables, remapped onto it,
+ *                 so every stock rule Anki ships already wears the palette.
+ * This file adds the shape: glass, pills, glow and motion. Each page is
+ * tagged on <html> (`lumen-deckbrowser`, `lumen-reviewer`, `lumen-toolbar`…)
+ * and everything below is scoped to one. */
+
+/* backdrop-filter stays on small, fixed-size pieces only: on a block taller
+ * than the window Chromium stops painting part of it, and the wallpaper
+ * behind is blurred beforehand anyway. */
+:root {
+  --lm-glass: color-mix(in srgb, var(--lm-surface-container) 58%, transparent);
+  --lm-glass-strong: color-mix(in srgb, var(--lm-surface-container-high) 76%, transparent);
+  --lm-glass-soft: color-mix(in srgb, var(--lm-surface-container-low) 40%, transparent);
+  --lm-edge: color-mix(in srgb, var(--lm-outline-variant) 60%, transparent);
+  --lm-edge-bright: color-mix(in srgb, var(--lm-primary) 55%, transparent);
+  --lm-drop: 0 10px 30px color-mix(in srgb, var(--lm-shadow) 38%, transparent);
+  --lm-glow: 0 0 0 1px var(--lm-edge-bright), 0 8px 28px color-mix(in srgb, var(--lm-primary) 32%, transparent);
+  --lm-blur: blur(18px) saturate(150%);
+  --lm-radius-s: 12px;
+  --lm-radius: 22px;
+  --lm-radius-l: 30px;
+  --lm-pop: cubic-bezier(.2, .9, .3, 1.25);
+  --lm-glide: cubic-bezier(.2, .8, .2, 1);
+  --lm-rainbow: linear-gradient(100deg, var(--lm-primary), var(--lm-tertiary), var(--lm-secondary), var(--lm-primary));
+}
+
+/* ── Everywhere ──────────────────────────────────────────────────── */
+
+html.lumen body {
+  font-family: var(--lm-font);
+}
+
+html.lumen ::selection {
+  background: color-mix(in srgb, var(--lm-primary) 40%, transparent);
+  color: var(--lm-on-surface);
+}
+
+html.lumen ::-webkit-scrollbar-thumb {
+  border-radius: 999px !important;
+}
+
+html.lumen a {
+  transition: color .2s;
+}
+
+/* ── Main window backdrop ───────────────────────────────────────────
+ * Three webviews (toolbar, page, bottom bar) each draw their own slice of
+ * one window-sized image; __init__.py hands each the offset of its slice. */
+
+html.lumen-main body,
+html.lumen-main body.card,
+html.lumen-main body.nightMode {
+  background: transparent !important;
+}
+
+html.lumen-main {
+  background: var(--lm-surface) !important;
+}
+
+html.lumen-main.lumen-wall {
+  background:
+    linear-gradient(
+      color-mix(in srgb, var(--lm-surface) calc(var(--lm-dim) * 100%), transparent),
+      color-mix(in srgb, var(--lm-surface) calc(var(--lm-dim) * 100%), transparent)
+    ),
+    var(--lm-wall) var(--lm-wall-pos) / var(--lm-wall-size) no-repeat fixed var(--lm-surface) !important;
+}
+
+/* Dialog pages (stats, deck options, editor…): the same flat surface. */
+html.lumen:not(.lumen-main):not(.lumen-editor):not(.lumen-card-layout) body {
+  background: var(--lm-surface);
+}
+
+/* ── Buttons, main window ──────────────────────────────────────────── */
+
+html.lumen-main button {
+  font-family: var(--lm-font);
+  color: var(--lm-on-surface);
+  background: var(--lm-glass-strong) !important;
+  border: 1px solid var(--lm-edge) !important;
+  border-radius: 999px !important;
+  padding: 6px 18px;
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--lm-shadow) 22%, transparent) !important;
+  backdrop-filter: var(--lm-blur);
+  cursor: pointer;
+  transition: transform .25s var(--lm-pop), box-shadow .25s, border-color .25s, background .25s;
+}
+
+html.lumen-main button:hover {
+  border-color: var(--lm-edge-bright) !important;
+  box-shadow: var(--lm-glow) !important;
+  transform: translateY(-1px);
+}
+
+html.lumen-main button:active {
+  transform: translateY(0) scale(.97);
+}
+
+html.lumen-main button:focus-visible {
+  outline: 2px solid var(--lm-primary);
+  outline-offset: 2px;
+}
+
+/* ── Due counts as pills ───────────────────────────────────────────── */
+
+html.lumen :is(.new-count, .learn-count, .review-count) {
+  display: inline-block;
+  min-width: 1.6em;
+  padding: 1px 9px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  line-height: 1.5;
+}
+
+html.lumen .new-count {
+  color: var(--lm-secondary);
+  background: color-mix(in srgb, var(--lm-secondary) 18%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lm-secondary) 35%, transparent);
+}
+
+html.lumen .learn-count {
+  color: var(--lm-tertiary);
+  background: color-mix(in srgb, var(--lm-tertiary) 18%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lm-tertiary) 35%, transparent);
+}
+
+html.lumen .review-count {
+  color: var(--lm-primary);
+  background: color-mix(in srgb, var(--lm-primary) 18%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lm-primary) 35%, transparent);
+}
+
+html.lumen .zero-count {
+  color: var(--lm-outline);
+  opacity: .55;
+}
+
+/* The one being studied, in the reviewer's counter, is underlined by Anki. */
+html.lumen :is(.new-count, .learn-count, .review-count) u {
+  text-decoration: none;
+}
+
+html.lumen .new-count:has(u) { background: var(--lm-secondary); color: var(--lm-on-secondary); }
+html.lumen .learn-count:has(u) { background: var(--lm-tertiary); color: var(--lm-on-tertiary); }
+html.lumen .review-count:has(u) { background: var(--lm-primary); color: var(--lm-on-primary); }
+
+/* ── Top toolbar ───────────────────────────────────────────────────── */
+
+html.lumen-toolbar body.fancy {
+  margin-bottom: 8px;
+}
+
+html.lumen-toolbar body .toolbar {
+  margin-top: 8px;
+  padding: 4px;
+  background: var(--lm-glass-strong) !important;
+  border: 1px solid var(--lm-edge);
+  border-radius: 999px !important;
+  box-shadow: var(--lm-drop) !important;
+  backdrop-filter: var(--lm-blur);
+}
+
+html.lumen-toolbar body .hitem,
+html.lumen-toolbar body.fancy:not(.flat) .hitem {
+  font-weight: 600;
+  padding: 5px 16px !important;
+  margin: 0 1px;
+  color: var(--lm-on-surface);
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  border-radius: 999px;
+  text-decoration: none !important;
+  transition: background .25s, color .25s, transform .25s var(--lm-pop);
+}
+
+html.lumen-toolbar body .hitem:hover {
+  color: var(--lm-on-primary);
+  background: var(--lm-rainbow) !important;
+  background-size: 200% 100% !important;
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--lm-primary) 40%, transparent);
+  transform: translateY(-1px);
+}
+
+html.lumen-toolbar body .hitem:active {
+  transform: scale(.95);
+}
+
+/* ── Deck list: glass cards ────────────────────────────────────────── */
+
+html.lumen-deckbrowser body {
+  margin-top: 1.5em;
+}
+
+html.lumen-deckbrowser table,
+html.lumen-deckbrowser .fancy table {
+  border-collapse: separate;
+  border-spacing: 0 7px;
+  padding: 10px 18px 14px;
+  background: var(--lm-glass-soft) !important;
+  border: 1px solid var(--lm-edge) !important;
+  border-radius: var(--lm-radius-l) !important;
+  box-shadow: var(--lm-drop) !important;
+}
+
+html.lumen-deckbrowser th {
+  border: none;
+  padding: 6px 12px 2px;
+  color: var(--lm-on-surface-variant);
+  font-size: .8em;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+html.lumen-deckbrowser tr.deck td,
+html.lumen-deckbrowser .fancy tr.deck td {
+  padding: 9px 14px;
+  background: var(--lm-glass);
+  border-top: 1px solid var(--lm-edge) !important;
+  border-bottom: 1px solid var(--lm-edge) !important;
+  transition: background .3s, border-color .3s, transform .3s var(--lm-pop), box-shadow .3s;
+}
+
+html.lumen-deckbrowser tr.deck td:first-child {
+  border-left: 1px solid var(--lm-edge) !important;
+  border-radius: var(--lm-radius) 0 0 var(--lm-radius) !important;
+}
+
+html.lumen-deckbrowser tr.deck td:last-child {
+  border-right: 1px solid var(--lm-edge) !important;
+  border-radius: 0 var(--lm-radius) var(--lm-radius) 0 !important;
+}
+
+/* One flat tint per row: a gradient would restart in every cell, since a
+ * cell with a transform (the hover lift, the rise-in) cannot pin one to the
+ * window. */
+html.lumen-deckbrowser tr.deck:hover td {
+  background: color-mix(in srgb, var(--lm-primary) 24%, var(--lm-glass-strong)) !important;
+  border-color: var(--lm-edge-bright) !important;
+  transform: translateY(-2px);
+}
+
+html.lumen-deckbrowser tr.deck.current td {
+  background: color-mix(in srgb, var(--lm-primary) 12%, var(--lm-glass)) !important;
+}
+
+html.lumen-deckbrowser tr.deck.current:hover td {
+  background: color-mix(in srgb, var(--lm-primary) 26%, var(--lm-glass-strong)) !important;
+}
+
+html.lumen-deckbrowser tr.deck.current td:first-child {
+  box-shadow: inset 4px 0 0 var(--lm-primary);
+}
+
+html.lumen-deckbrowser a.deck {
+  font-weight: 600;
+  color: var(--lm-on-surface);
+  text-decoration: none !important;
+}
+
+html.lumen-deckbrowser tr.deck:hover a.deck {
+  color: var(--lm-primary);
+}
+
+html.lumen-deckbrowser .collapse {
+  color: var(--lm-on-surface-variant);
+  font-weight: 700;
+  text-decoration: none;
+  transition: transform .3s var(--lm-pop), color .2s;
+}
+
+html.lumen-deckbrowser .collapse:hover {
+  color: var(--lm-primary);
+  transform: scale(1.3);
+}
+
+html.lumen-deckbrowser .gears {
+  opacity: .7;
+  filter: none !important;
+  transition: transform .5s var(--lm-glide);
+}
+
+html.lumen-deckbrowser .gears:hover {
+  transform: rotate(120deg);
+}
+
+/* gears.svg is a black glyph: lighten it on dark palettes. */
+html.lumen-deckbrowser.night-mode .gears {
+  filter: invert(1) !important;
+}
+
+html.lumen-deckbrowser #studiedToday {
+  display: inline-block;
+  margin: 1.4em 0;
+  padding: 8px 20px;
+  color: var(--lm-on-surface-variant);
+  background: var(--lm-glass);
+  border: 1px solid var(--lm-edge);
+  border-radius: 999px;
+  backdrop-filter: var(--lm-blur);
+}
+
+html.lumen-deckbrowser .callout {
+  background: var(--lm-glass-strong);
+  border: 1px solid var(--lm-edge);
+  border-radius: var(--lm-radius);
+}
+
+/* ── Overview ──────────────────────────────────────────────────────── */
+
+html.lumen-overview body > center {
+  margin-top: 2.5em;
+}
+
+html.lumen-overview h3 {
+  margin: 0 0 .6em;
+  font-size: 2.2em;
+  font-weight: 800;
+  letter-spacing: -.02em;
+  background: var(--lm-rainbow);
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+html.lumen-overview body > center > table {
+  padding: 18px 24px;
+  background: var(--lm-glass);
+  border: 1px solid var(--lm-edge);
+  border-radius: var(--lm-radius-l);
+  box-shadow: var(--lm-drop);
+}
+
+html.lumen-overview #study {
+  font-size: 1.15em;
+  font-weight: 700;
+  padding: 12px 34px;
+  color: var(--lm-on-primary) !important;
+  background: var(--lm-rainbow) !important;
+  background-size: 250% 100% !important;
+  border: none !important;
+  box-shadow: 0 8px 26px color-mix(in srgb, var(--lm-primary) 45%, transparent) !important;
+}
+
+html.lumen-overview #study:hover {
+  background-position: 100% 0 !important;
+  transform: translateY(-2px) scale(1.03);
+  box-shadow: 0 12px 34px color-mix(in srgb, var(--lm-primary) 60%, transparent) !important;
+}
+
+html.lumen-overview .descfont {
+  color: var(--lm-on-surface-variant);
+}
+
+/* ── Bottom bars ───────────────────────────────────────────────────── */
+
+html.lumen-bottom #outer,
+html.lumen-bottom .nightMode #outer {
+  border-top: none !important;
+  background: transparent !important;
+}
+
+html.lumen-bottom .stattxt,
+html.lumen-bottom .nobold {
+  color: var(--lm-on-surface-variant);
+  font-weight: 600;
+  letter-spacing: .02em;
+}
+
+/* Show answer: one wide gradient pill. */
+html.lumen-reviewer-bottom #ansbut {
+  min-width: 260px;
+  padding: 9px 30px;
+  font-weight: 700;
+  color: var(--lm-on-primary) !important;
+  background: var(--lm-rainbow) !important;
+  background-size: 250% 100% !important;
+  border: none !important;
+  box-shadow: 0 6px 22px color-mix(in srgb, var(--lm-primary) 42%, transparent) !important;
+}
+
+html.lumen-reviewer-bottom #ansbut:hover {
+  background-position: 100% 0 !important;
+}
+
+/* Answer buttons, each in its own colour, glowing in it on hover. */
+html.lumen-reviewer-bottom button[data-ease] {
+  --ease: var(--lm-primary);
+  /* Palettes can make any of these dark (error often is): lift the text
+   * towards the foreground so it always reads. */
+  --ease-text: color-mix(in oklab, var(--ease) 62%, var(--lm-on-surface));
+  min-width: 108px;
+  padding: 9px 22px;
+  font-weight: 700;
+  color: var(--ease-text);
+  background: color-mix(in srgb, var(--ease) 14%, var(--lm-glass-strong)) !important;
+  border: 1px solid color-mix(in srgb, var(--ease-text) 45%, transparent) !important;
+}
+
+html.lumen-reviewer-bottom button[data-ease="1"] { --ease: var(--lm-error); }
+html.lumen-reviewer-bottom button[data-ease="2"] { --ease: var(--lm-tertiary); }
+html.lumen-reviewer-bottom button[data-ease="3"] { --ease: var(--lm-primary); }
+html.lumen-reviewer-bottom button[data-ease="4"] { --ease: var(--lm-secondary); }
+
+html.lumen-reviewer-bottom button[data-ease]:hover,
+html.lumen-reviewer-bottom button[data-ease]:focus-visible {
+  color: var(--lm-on-surface);
+  background: color-mix(in srgb, var(--ease) 60%, var(--lm-glass-strong)) !important;
+  border-color: var(--ease-text) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ease) 25%, transparent),
+              0 6px 24px color-mix(in srgb, var(--ease) 55%, transparent) !important;
+  transform: translateY(-2px) scale(1.04);
+}
+
+html.lumen-reviewer-bottom #defease {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ease) 35%, transparent) !important;
+}
+
+/* ── Cards ─────────────────────────────────────────────────────────── */
+
+/* Override the stock note types' `.card { color: black; background: white }`
+ * — specific enough to win, plain enough for a note type's own rules
+ * with an id or !important to still win over it. */
+html.lumen-cards.lumen-card body.card {
+  color: var(--lm-on-surface);
+  font-family: var(--lm-card-font);
+  background-color: transparent;
+}
+
+html.lumen-cards.lumen-card #qa {
+  max-width: 880px;
+  margin: 22px auto;
+  padding: 30px 40px;
+  background: var(--lm-glass);
+  border: 1px solid var(--lm-edge);
+  border-radius: var(--lm-radius-l);
+  box-shadow: var(--lm-drop), inset 0 1px 0 color-mix(in srgb, white 6%, transparent);
+  overflow-wrap: anywhere;
+}
+
+html.lumen-cards.lumen-card #qa:empty {
+  display: none;
+}
+
+html.lumen-cards.lumen-card hr,
+html.lumen-cards.lumen-card hr#answer {
+  height: 2px;
+  margin: 1.2em -10px;
+  border: none;
+  border-radius: 2px;
+  background: var(--lm-rainbow);
+  background-size: 200% 100%;
+  opacity: .85;
+}
+
+html.lumen-cards.lumen-card .card .cloze,
+html.lumen-cards.lumen-card .cloze {
+  color: var(--lm-primary);
+  font-weight: 700;
+  padding: 0 .2em;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--lm-primary) 14%, transparent);
+}
+
+html.lumen-cards.lumen-card .cloze-inactive {
+  color: var(--lm-on-surface-variant);
+}
+
+html.lumen-cards.lumen-card a {
+  color: var(--lm-primary);
+}
+
+html.lumen-cards.lumen-card b,
+html.lumen-cards.lumen-card strong {
+  color: color-mix(in srgb, var(--lm-primary) 55%, var(--lm-on-surface));
+}
+
+html.lumen-cards.lumen-card code,
+html.lumen-cards.lumen-card pre {
+  font-family: "Maple Mono NF", "JetBrainsMono Nerd Font", monospace;
+  font-size: .9em;
+  background: var(--lm-surface-container-lowest);
+  border: 1px solid var(--lm-edge);
+  border-radius: var(--lm-radius-s);
+}
+
+html.lumen-cards.lumen-card code { padding: .1em .4em; }
+html.lumen-cards.lumen-card pre { padding: 14px 18px; }
+html.lumen-cards.lumen-card pre code { padding: 0; border: none; background: none; }
+
+html.lumen-cards.lumen-card img {
+  border-radius: var(--lm-radius-s);
+}
+
+html.lumen-cards.lumen-card #typeans {
+  padding: 10px 16px;
+  font-family: var(--lm-card-font);
+  color: var(--lm-on-surface);
+  background: var(--lm-surface-container-lowest);
+  border: 1px solid var(--lm-edge);
+  border-radius: var(--lm-radius-s);
+  outline: none;
+}
+
+html.lumen-cards.lumen-card input#typeans:focus {
+  border-color: var(--lm-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--lm-primary) 25%, transparent);
+}
+
+html.lumen-cards.lumen-card .typeGood { background: color-mix(in srgb, var(--lm-primary) 30%, transparent); color: inherit; }
+html.lumen-cards.lumen-card .typeBad { background: color-mix(in srgb, var(--lm-error) 35%, transparent); color: inherit; }
+html.lumen-cards.lumen-card .typeMissed { background: var(--lm-surface-container-highest); color: inherit; }
+
+html.lumen-cards.lumen-card .replay-button svg circle {
+  fill: var(--lm-primary);
+  stroke: none;
+}
+
+html.lumen-cards.lumen-card .replay-button svg path {
+  fill: var(--lm-on-primary);
+}
+
+html.lumen-cards.lumen-card .replay-button:hover svg {
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--lm-primary) 70%, transparent));
+}
+
+/* ── Avatar (anki_avatar add-on) ───────────────────────────────────── */
+
+html.lumen #anki-avatar,
+html.lumen #anki-avatar-home {
+  filter: drop-shadow(0 0 22px color-mix(in srgb, var(--lm-primary) 45%, transparent));
+}
+
+html.lumen #anki-avatar { position: relative; }
+
+html.lumen :is(#anki-avatar, #anki-avatar-home)::before {
+  content: "";
+  position: absolute;
+  inset: 12%;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(circle,
+    color-mix(in srgb, var(--lm-primary) 45%, transparent),
+    color-mix(in srgb, var(--lm-secondary) 18%, transparent) 55%,
+    transparent 70%);
+  filter: blur(18px);
+}
+
+/* ── Congratulations ───────────────────────────────────────────────── */
+
+html.lumen-congrats body {
+  display: flex;
+  justify-content: center;
+}
+
+html.lumen-congrats .congrats {
+  position: relative;
+  margin-top: 3em;
+  padding: 34px 44px;
+  max-width: 34em;
+  text-align: center;
+  background: var(--lm-glass);
+  border: 1px solid var(--lm-edge);
+  border-radius: var(--lm-radius-l);
+  box-shadow: var(--lm-drop), 0 0 80px color-mix(in srgb, var(--lm-primary) 22%, transparent);
+}
+
+html.lumen-congrats .congrats h1 {
+  margin: 0 0 .4em;
+  font-size: 2.6em;
+  font-weight: 800;
+  letter-spacing: -.02em;
+  background: var(--lm-rainbow);
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+html.lumen-congrats .congrats h1::before,
+html.lumen-congrats .congrats h1::after {
+  content: "✦";
+  display: inline-block;
+  margin: 0 .35em;
+  font-size: .6em;
+  vertical-align: middle;
+  color: var(--lm-tertiary);
+  -webkit-text-fill-color: var(--lm-tertiary);
+}
+
+html.lumen-congrats .congrats a {
+  color: var(--lm-primary);
+  font-weight: 600;
+}
+
+html.lumen-congrats .description {
+  border: 1px solid var(--lm-edge) !important;
+  border-radius: var(--lm-radius);
+  background: var(--lm-glass-soft);
+}
+
+/* ── Stats ─────────────────────────────────────────────────────────── */
+
+html.lumen-deck-stats .graph,
+html.lumen-deck-stats .container,
+html.lumen-deck-options .container {
+  border-radius: var(--lm-radius) !important;
+}
+
+/* ── Motion ────────────────────────────────────────────────────────── */
+
+@keyframes lumen-rise {
+  from { opacity: 0; transform: translateY(12px) scale(.985); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes lumen-pop {
+  0% { opacity: 0; transform: scale(.9); }
+  60% { opacity: 1; transform: scale(1.02); }
+  100% { opacity: 1; transform: none; }
+}
+
+@keyframes lumen-flow {
+  from { background-position: 0% 50%; }
+  to { background-position: 300% 50%; }
+}
+
+@keyframes lumen-breathe {
+  0%, 100% { opacity: .65; transform: scale(.95); }
+  50% { opacity: 1; transform: scale(1.06); }
+}
+
+@keyframes lumen-twinkle {
+  0%, 100% { opacity: .4; transform: scale(.8) rotate(0deg); }
+  50% { opacity: 1; transform: scale(1.15) rotate(20deg); }
+}
+
+html.lumen-motion tr.deck td {
+  animation: lumen-rise .45s var(--lm-glide) backwards;
+  animation-delay: calc(var(--i, 0) * 28ms);
+}
+
+html.lumen-motion #studiedToday {
+  animation: lumen-rise .5s var(--lm-glide) both;
+  animation-delay: .25s;
+}
+
+html.lumen-motion.lumen-overview > center > * {
+  animation: lumen-rise .5s var(--lm-glide) both;
+}
+
+html.lumen-motion.lumen-overview > center > :nth-child(2) { animation-delay: 60ms; }
+html.lumen-motion.lumen-overview > center > :nth-child(3) { animation-delay: 120ms; }
+
+html.lumen-motion :is(h3, .congrats h1, #ansbut, #study, .hitem:hover) {
+  animation: lumen-flow 9s linear infinite;
+}
+
+html.lumen-motion.lumen-overview h3 {
+  animation: lumen-rise .5s var(--lm-glide) both, lumen-flow 9s linear infinite;
+}
+
+/* The question rises in when a card comes up; on the answer side only what
+ * follows the divider does, so the question stays put. */
+html.lumen-motion.lumen-cards.lumen-card #qa:not(:has(#answer)) > * {
+  animation: lumen-rise .4s var(--lm-glide) both;
+}
+
+html.lumen-motion.lumen-cards.lumen-card #answer {
+  animation: lumen-pop .45s var(--lm-glide) both;
+}
+
+html.lumen-motion.lumen-cards.lumen-card #answer ~ * {
+  animation: lumen-rise .45s var(--lm-glide) both;
+  animation-delay: 80ms;
+}
+
+html.lumen-motion.lumen-reviewer-bottom button[data-ease] {
+  animation: lumen-pop .35s var(--lm-pop) both;
+}
+
+html.lumen-motion.lumen-reviewer-bottom td:nth-child(2) > button[data-ease] { animation-delay: 40ms; }
+html.lumen-motion.lumen-reviewer-bottom td:nth-child(3) > button[data-ease] { animation-delay: 80ms; }
+html.lumen-motion.lumen-reviewer-bottom td:nth-child(4) > button[data-ease] { animation-delay: 120ms; }
+
+html.lumen-motion :is(#anki-avatar, #anki-avatar-home)::before {
+  animation: lumen-breathe 4.5s ease-in-out infinite;
+}
+
+html.lumen-motion.lumen-congrats .congrats {
+  animation: lumen-pop .6s var(--lm-pop) both;
+}
+
+html.lumen-motion.lumen-congrats .congrats h1 {
+  animation: lumen-flow 6s linear infinite;
+}
+
+html.lumen-motion.lumen-congrats .congrats h1::before,
+html.lumen-motion.lumen-congrats .congrats h1::after {
+  animation: lumen-twinkle 2.4s ease-in-out infinite;
+}
+
+html.lumen-motion.lumen-congrats .congrats h1::after {
+  animation-delay: 1.2s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.lumen * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
