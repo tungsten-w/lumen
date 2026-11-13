@@ -4,7 +4,7 @@ use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::thread;
 use std::time::{Duration, SystemTime};
 
@@ -26,6 +26,38 @@ const TRANSITION_GUARD: Duration = Duration::from_millis(700);
 
 fn home_dir() -> PathBuf {
     PathBuf::from(std::env::var("HOME").expect("HOME n'est pas défini"))
+}
+
+/// `~/Pictures/Wallpapers`, where every built-in mode keeps its images.
+fn wallpapers() -> PathBuf {
+    home_dir().join("Pictures/Wallpapers")
+}
+
+/// The link `apply_all` keeps pointed at the wallpaper that is up.
+fn current_link() -> PathBuf {
+    wallpapers().join("current_wallpaper.jpg")
+}
+
+/// `~/.config/lumen/settings.json` — `None` when it is missing or unreadable.
+fn settings() -> Option<serde_json::Value> {
+    let raw = fs::read_to_string(home_dir().join(".config/lumen/settings.json")).ok()?;
+    serde_json::from_str(&raw).ok()
+}
+
+/// XDG_RUNTIME_DIR: a user-owned tmpfs, so nothing put there reaches the disk.
+fn runtime_dir() -> PathBuf {
+    std::env::var_os("XDG_RUNTIME_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir)
+}
+
+/// Runs a tool to its end, and says so when it fails rather than swallowing it.
+fn run(command: &mut Command) -> bool {
+    let ok = command.status().is_ok_and(|status| status.success());
+    if !ok {
+        eprintln!("lumen : échec de {command:?}");
+    }
+    ok
 }
 
 /// Where every window looks for the wallpaper that is currently up: the
@@ -64,51 +96,86 @@ fn current_wallpaper_path(link: &Path) -> Option<PathBuf> {
 /// wallpaper change writes a fresh one, and re-copying the image on every launch
 /// would be felt on a large one.
 fn restore_current_wallpaper() {
-    let shown = Path::new(CURRENT_WALLPAPER);
-    if shown.exists() {
-        return;
-    }
     // `exists()` follows the link, so one left pointing at a wallpaper that has
     // since been deleted is skipped rather than copied as an error.
-    let kept = home_dir().join("Pictures/Wallpapers/current_wallpaper.jpg");
-    if kept.exists() {
+    let kept = current_link();
+    if !kept.exists() {
+        return;
+    }
+    if !Path::new(CURRENT_WALLPAPER).exists() {
         cache_wallpaper_still(&kept);
+    }
+    // A GIF is played by mpvpaper, which nothing restarts at login: awww comes
+    // back with the transparent image it was left on, and nothing under it.
+    // The link is always called `.jpg`: what it points at says what it is.
+    if let Ok(real) = fs::canonicalize(&kept)
+        && is_gif(&real)
+        && processes_where(is_mpvpaper_cmdline).is_empty()
+        && Command::new("awww")
+            .arg("query")
+            .output()
+            .is_ok_and(|out| String::from_utf8_lossy(&out.stdout).contains("lumen/clear.png"))
+    {
+        play_gif(&real);
     }
 }
 
-/// Keep the menu's still-image cache as a real PNG, including when the chosen
-/// wallpaper is a GIF or another format. The picker can separately use the
-/// original path to animate GIF backgrounds.
-fn cache_wallpaper_still(wallpaper: &Path) {
-    if wallpaper
-        .extension()
-        .is_some_and(|extension| extension.eq_ignore_ascii_case("png"))
-    {
-        if let Err(error) = fs::copy(wallpaper, CURRENT_WALLPAPER) {
-            eprintln!("Could not cache wallpaper {}: {error}", wallpaper.display());
-        }
-        return;
+/// Converts the first frame of `from` into a PNG at `to`, and says whether it
+/// did. `options` holds the whole command line, `-[0]` standing for the image.
+///
+/// The image goes in on stdin and comes out on stdout because ImageMagick reads
+/// file *names* as instructions: a `%d` in one is a frame counter, a `[` a
+/// frame selector — a wallpaper called `100% done.png` never got a thumbnail.
+/// Written beside its final name, so a run that is killed half way never
+/// leaves a broken file that looks up to date.
+fn magick_png(from: &Path, options: &[&str], to: &Path) -> bool {
+    let part = PathBuf::from(format!("{}.part", to.display()));
+    let made = fs::File::open(from)
+        .and_then(|image| Ok((image, fs::File::create(&part)?)))
+        .is_ok_and(|(image, png)| {
+            run(Command::new("magick")
+                .arg("-quiet") // warnings only: a PNG with broken XMP converts fine
+                .args(options)
+                .arg("png:-")
+                .stdin(image)
+                .stdout(png))
+        })
+        && fs::rename(&part, to).is_ok();
+    if !made {
+        let _ = fs::remove_file(&part);
     }
+    made
+}
 
-    let temporary = format!("{CURRENT_WALLPAPER}.tmp.png");
-    let mut first_frame = wallpaper.as_os_str().to_os_string();
-    first_frame.push("[0]");
-    let converted = Command::new("magick")
-        .arg(first_frame)
-        .arg(&temporary)
-        .status()
-        .is_ok_and(|status| status.success());
-    if converted {
-        if let Err(error) = fs::rename(&temporary, CURRENT_WALLPAPER) {
-            eprintln!("Could not cache wallpaper {}: {error}", wallpaper.display());
-            let _ = fs::remove_file(&temporary);
-        }
-    } else {
-        eprintln!(
-            "Could not convert wallpaper {} to PNG (ImageMagick needed)",
-            wallpaper.display()
-        );
-        let _ = fs::remove_file(&temporary);
+fn is_gif(path: &Path) -> bool {
+    path.extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("gif"))
+}
+
+/// Largest edge of the still the menu draws behind itself. No window is wider
+/// than the screen, and a wallpaper can be 10240 pixels across: converting that
+/// at full size took 8 to 20 seconds per apply, and left the menu a 48 MB PNG
+/// to decode on every launch.
+const STILL_MAX_EDGE: u32 = 2560;
+
+/// Keep the menu's still-image cache as a real PNG, whatever the wallpaper is —
+/// a GIF gives its first frame. Shrunk to `STILL_MAX_EDGE` and barely
+/// compressed: it lives in RAM and is read once, so encoding time is the only
+/// cost that matters.
+fn cache_wallpaper_still(wallpaper: &Path) {
+    let size = format!("{STILL_MAX_EDGE}x{STILL_MAX_EDGE}");
+    let options = [
+        // Lets libjpeg decode a huge JPEG straight to a fraction of its size.
+        "-define",
+        &format!("jpeg:size={size}"),
+        "-[0]",
+        "-resize",
+        &format!("{size}>"),
+        "-define",
+        "png:compression-level=1",
+    ];
+    if !magick_png(wallpaper, &options, Path::new(CURRENT_WALLPAPER)) {
+        eprintln!("Could not cache wallpaper {}", wallpaper.display());
     }
 }
 
@@ -139,7 +206,7 @@ fn parallelism() -> usize {
 fn is_image(path: &Path) -> bool {
     path.extension()
         .and_then(|e| e.to_str())
-        .map(|e| matches!(e.to_lowercase().as_str(), "jpg" | "png" | "gif" | "webp"))
+        .map(|e| matches!(e.to_lowercase().as_str(), "jpg" | "jpeg" | "png" | "gif" | "webp"))
         .unwrap_or(false)
 }
 
@@ -236,46 +303,87 @@ fn get_moment_journee() -> &'static str {
 // FONCTIONS
 // ══════════════════════════════════════════════════════════════
 
-/// Regenerates every stale thumbnail, one `magick` process per core.
+/// The small, playing copy of a GIF the picker shows under the cursor — `None`
+/// for anything that is not one. It sits beside the still thumbnail.
+///
+/// The picker used to play the wallpaper itself there: 2560 pixels wide and up
+/// to 260 MB, decoded at full size only to be drawn in a 340 pixel box.
+fn gif_preview(img: &Path, thumb: &Path) -> Option<PathBuf> {
+    is_gif(img).then(|| thumb.with_extension("gif"))
+}
+
+/// True when `made` is missing or older than the `img` it was made from.
+fn is_outdated(made: &Path, img: &Path) -> bool {
+    let mtime = |path: &Path| path.metadata().and_then(|meta| meta.modified()).ok();
+    mtime(made) < mtime(img)
+}
+
+/// Regenerates every stale thumbnail and GIF preview, one process per core.
 ///
 /// `MAGICK_THREAD_LIMIT=1` matters as much as the fan-out here: left alone each
 /// magick spins up its own OpenMP pool, and the resulting oversubscription costs
 /// more than it buys once we are already running one process per core.
-fn generate_thumbnails(pairs: &[(&PathBuf, PathBuf)]) {
-    let todo: Vec<&(&PathBuf, PathBuf)> = pairs
-        .iter()
-        .filter(|(img, thumb)| thumb_is_stale(thumb, img))
-        .collect();
-
-    if todo.is_empty() {
-        return;
+fn generate_thumbnails(pairs: &[(PathBuf, PathBuf)]) {
+    let mut todo: Vec<(&Path, PathBuf)> = Vec::new();
+    for (img, thumb) in pairs {
+        if thumb_is_stale(thumb, img) {
+            todo.push((img, thumb.clone()));
+        }
+        if let Some(preview) = gif_preview(img, thumb).filter(|p| is_outdated(p, img)) {
+            todo.push((img, preview));
+        }
     }
 
     let next = AtomicUsize::new(0);
-    let workers = parallelism().min(todo.len());
-
     thread::scope(|scope| {
-        for _ in 0..workers {
+        for _ in 0..parallelism().min(todo.len()) {
             scope.spawn(|| {
-                loop {
-                    let index = next.fetch_add(1, Ordering::Relaxed);
-                    let Some((img, thumb)) = todo.get(index) else {
-                        break;
-                    };
-                    let _ = Command::new("magick")
-                        .env("MAGICK_THREAD_LIMIT", "1")
-                        .arg(format!("{}[0]", img.display()))
-                        .arg("-thumbnail")
-                        .arg(format!("{THUMB_MAX_EDGE}x{THUMB_MAX_EDGE}>"))
-                        .arg("-strip")
-                        .arg(thumb)
-                        .stdout(Stdio::null())
-                        .stderr(Stdio::null())
-                        .status();
+                while let Some((img, out)) = todo.get(next.fetch_add(1, Ordering::Relaxed)) {
+                    if out.extension().is_none_or(|e| e != "gif") {
+                        let size = format!("{THUMB_MAX_EDGE}x{THUMB_MAX_EDGE}>");
+                        magick_png(img, &["-[0]", "-thumbnail", &size, "-strip"], out);
+                        continue;
+                    }
+                    let part = format!("{}.part", out.display());
+                    let scale =
+                        format!("fps=12,scale='min({THUMB_MAX_EDGE},iw)':-2:flags=fast_bilinear");
+                    let made = Command::new("ffmpeg")
+                        .args(["-v", "quiet", "-y", "-i"])
+                        .arg(img)
+                        .args(["-vf", &scale, "-f", "gif", &part])
+                        .stdin(Stdio::null())
+                        .status()
+                        .is_ok_and(|status| status.success());
+                    if !made || fs::rename(&part, out).is_err() {
+                        let _ = fs::remove_file(&part);
+                    }
                 }
             });
         }
     });
+}
+
+/// Every wallpaper of `dir`, sorted and paired with where its thumbnail lives.
+/// `None` when the thumbnail directory cannot be made.
+fn thumb_pairs(dir: &Path) -> Option<Vec<(PathBuf, PathBuf)>> {
+    let thumb_dir = dir.join(".thumbnails");
+    fs::create_dir_all(&thumb_dir).ok()?;
+    let mut images = find_images(dir, &thumb_dir);
+    images.sort();
+    // `a.jpg`, `a.gif` and `sub/a.jpg` would all land on `a.png`: the first keeps
+    // the short name, the others take their full name, then their path.
+    let mut taken = std::collections::HashSet::new();
+    let pairs = images.into_iter().filter_map(|img| {
+        let relative = img.strip_prefix(dir).ok()?.to_string_lossy().replace('/', "_");
+        let names = [
+            img.file_stem()?.to_string_lossy().into_owned(),
+            img.file_name()?.to_string_lossy().into_owned(),
+            relative,
+        ];
+        let name = names.into_iter().find(|name| taken.insert(name.clone()))?;
+        Some((img, thumb_dir.join(format!("{name}.png"))))
+    });
+    Some(pairs.collect())
 }
 
 /// Every wallpaper of `dir`, paired with its thumbnail and ready to display.
@@ -284,29 +392,12 @@ fn generate_thumbnails(pairs: &[(&PathBuf, PathBuf)]) {
 /// refresh all happen here. An empty directory gives an empty list: the pickers
 /// treat that as an error, but `--settings` is happy to show an empty grid.
 fn wallpaper_entries(dir: &Path) -> Vec<(PathBuf, PathBuf)> {
-    let thumb_dir = dir.join(".thumbnails");
-    if fs::create_dir_all(&thumb_dir).is_err() {
-        eprintln!("Erreur : impossible de créer {}.", thumb_dir.display());
+    let Some(pairs) = thumb_pairs(dir) else {
+        eprintln!("Erreur : impossible de créer les vignettes de {}.", dir.display());
         return Vec::new();
-    }
-
-    let mut images = find_images(dir, &thumb_dir);
-    images.sort();
-
-    let pairs: Vec<(&PathBuf, PathBuf)> = images
-        .iter()
-        .filter_map(|img| {
-            let base_name = img.file_stem()?.to_string_lossy();
-            Some((img, thumb_dir.join(format!("{base_name}.png"))))
-        })
-        .collect();
-
+    };
     generate_thumbnails(&pairs);
-
     pairs
-        .into_iter()
-        .map(|(img, thumb)| (img.clone(), thumb))
-        .collect()
 }
 
 /// The wallpaper list as the Quickshell front-end reads it.
@@ -318,6 +409,10 @@ fn items_json(entries: &[(PathBuf, PathBuf)]) -> String {
                 "name": img.file_name()?.to_string_lossy(),
                 "path": img.to_string_lossy(),
                 "thumb": thumb.to_string_lossy(),
+                // Absent when ffmpeg is: the picker then plays the GIF itself.
+                "preview": gif_preview(img, thumb)
+                    .filter(|preview| preview.is_file())
+                    .map(|preview| preview.to_string_lossy().into_owned()),
             }))
         })
         .collect();
@@ -379,9 +474,7 @@ fn pick_random(dir: &Path) -> Option<PathBuf> {
         eprintln!("Erreur : Aucune image dans {}.", dir.display());
         std::process::exit(1);
     }
-
-    let mut rng = rand::thread_rng();
-    images.choose(&mut rng).cloned()
+    images.choose(&mut rand::thread_rng()).cloned()
 }
 
 fn update_json_field(path: &Path, key: &str, value: &str) {
@@ -413,13 +506,23 @@ fn spicetify_colors() -> Option<PathBuf> {
     colors.is_file().then_some(colors)
 }
 
+/// The arguments of a `/proc/<pid>/cmdline`. NUL-separated as a rule — but
+/// Spotify, like every Chromium, rewrites its own with spaces, and read as one
+/// argument its main process was never recognised: every apply then took the
+/// watcher for a stale one, waited up to 15 s and restarted it.
+fn argv(cmdline: &[u8]) -> impl Iterator<Item = &[u8]> {
+    cmdline
+        .split(|&b| b == 0 || b == b' ')
+        .filter(|arg| !arg.is_empty())
+}
+
 /// Whether a `/proc/<pid>/cmdline` is a `spicetify watch`.
 ///
 /// The arguments arrive NUL-separated. `comm` alone cannot tell a watch from
 /// an `apply` or a `refresh` that happens to be running, so this reads the
 /// command line instead — `pgrep -f`, without the fork.
 fn is_watch_cmdline(cmdline: &[u8]) -> bool {
-    let mut args = cmdline.split(|&b| b == 0).filter(|arg| !arg.is_empty());
+    let mut args = argv(cmdline);
     let is_spicetify = args
         .next()
         .is_some_and(|argv0| argv0.rsplit(|&b| b == b'/').next() == Some(b"spicetify"));
@@ -431,7 +534,7 @@ fn is_watch_cmdline(cmdline: &[u8]) -> bool {
 /// Every helper Spotify forks — zygote, renderer, crashpad — is also called
 /// `spotify`, and only they carry a `--type=`.
 fn is_spotify_main_cmdline(cmdline: &[u8]) -> bool {
-    let mut args = cmdline.split(|&b| b == 0).filter(|arg| !arg.is_empty());
+    let mut args = argv(cmdline);
     let is_spotify = args
         .next()
         .is_some_and(|argv0| argv0.rsplit(|&b| b == b'/').next() == Some(b"spotify"));
@@ -661,13 +764,6 @@ fn classic_generators(settings: Option<&serde_json::Value>) -> (bool, bool) {
     (pywal, wallust)
 }
 
-fn selected_classic_generators() -> (bool, bool) {
-    let settings = fs::read_to_string(home_dir().join(".config/lumen/settings.json"))
-        .ok()
-        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok());
-    classic_generators(settings.as_ref())
-}
-
 /// The policy Brave is handed, for one colour.
 fn brave_policy(colour: &str) -> String {
     // `BrowserColorScheme` is kept because it costs nothing and was already in
@@ -759,146 +855,207 @@ fn is_running(process_name: &str) -> bool {
     false
 }
 
-/// Apply wallpaper and themes.
+/// Whether a `/proc/<pid>/cmdline` is an mpvpaper.
+fn is_mpvpaper_cmdline(cmdline: &[u8]) -> bool {
+    let argv0 = argv(cmdline).next().unwrap_or_default();
+    argv0.rsplit(|&b| b == b'/').next() == Some(b"mpvpaper")
+}
+
+/// Starts mpvpaper on `gif`, under awww, and says whether it started.
+fn play_gif(gif: &Path) -> bool {
+    Command::new("nohup")
+        .args(["mpvpaper", "-l", "background", "-o"])
+        // `panscan` fills the screen by cropping, the way awww does.
+        .args(["loop no-audio panscan=1.0 really-quiet", "*"])
+        .arg(gif)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .is_ok()
+}
+
+/// The frame rate to animate a transition at: the fastest monitor's refresh
+/// rate. At a fixed 60 a transition visibly stutters on a 165 Hz screen, and
+/// awww keeps up easily — half a core for both monitors at 180.
+fn transition_fps() -> String {
+    Command::new("hyprctl")
+        .args(["-j", "monitors"])
+        .output()
+        .ok()
+        .and_then(|out| serde_json::from_slice::<serde_json::Value>(&out.stdout).ok())
+        .and_then(|monitors| {
+            let rates = monitors.as_array()?.iter();
+            rates
+                .filter_map(|monitor| monitor.get("refreshRate")?.as_f64())
+                .reduce(f64::max)
+        })
+        .map_or(60, |hz| hz.round() as u32)
+        .to_string()
+}
+
+/// Puts the wallpaper on screen: awww for a still, mpvpaper for a GIF.
+///
+/// awww can animate a GIF, but only after resizing and compressing every frame
+/// for every monitor — measured at 10 to 41 seconds the first time, and over a
+/// gigabyte of cache for one file. mpv just plays it, nothing cached.
+///
+/// So a GIF arrives the way a still does — awww transitions to its first frame
+/// — while mpvpaper starts on the `background` layer, under awww. Once the
+/// transition is over awww is handed a transparent image and the player shows
+/// through, with whatever else lives on the `bottom` layer (desktop widgets)
+/// still on top. Without mpvpaper installed, awww animates the GIF itself.
+///
+/// `transition_started` is raised when awww has taken the image: its client
+/// spends half a second decoding first, so that — not the launch — is when
+/// the animation begins.
+fn show_wallpaper(wallpaper: &Path, transition_started: &AtomicBool) {
+    let fps = transition_fps();
+    let awww = |image: &Path, kind: &str| {
+        run(Command::new("awww").arg("img").arg(image).args([
+            "--transition-type",
+            kind,
+            "--transition-fps",
+            &fps,
+            "--transition-duration",
+            "0.7",
+        ]))
+    };
+    // The previous GIF's player. It goes once the new wallpaper covers it.
+    let old = processes_where(is_mpvpaper_cmdline);
+    let cache = home_dir().join(".cache/lumen");
+    let (frame, clear) = (cache.join("gif-frame.png"), cache.join("clear.png"));
+    let fast = ["-[0]", "-define", "png:compression-level=1"];
+    let live = is_gif(wallpaper)
+        && has_command("mpvpaper")
+        && fs::create_dir_all(&cache).is_ok()
+        && magick_png(wallpaper, &fast, &frame)
+        && (clear.is_file()
+            || run(Command::new("magick")
+                .args(["-size", "16x16", "xc:none"])
+                .arg(&clear)));
+
+    awww(if live { &frame } else { wallpaper }, "random");
+    transition_started.store(true, Ordering::Relaxed);
+
+    let playing = live && play_gif(wallpaper);
+    if playing || !old.is_empty() {
+        // The transition, then the moment mpv needs to draw its first frame.
+        thread::sleep(TRANSITION_GUARD + Duration::from_millis(300));
+    }
+    for (pid, _) in old {
+        let _ = Command::new("kill").arg(pid).status();
+    }
+    if playing {
+        awww(&clear, "none");
+    }
+}
+
+/// Apply wallpaper and themes. Every step is independent of the others, so each
+/// gets a thread and the whole thing takes as long as the slowest one.
 fn apply_all(wallpaper: &Path, dark: bool) {
     // Everything the theming tools write from here on is newer than this.
     let started = SystemTime::now();
-    let wal_flags: Vec<&str> = if dark { vec!["-q"] } else { vec!["-l", "-q"] };
-    let wallust_palette = if dark { "dark" } else { "light" };
-    let (run_pywal, run_wallust) = selected_classic_generators();
-    let matugen_mode = if dark { "dark" } else { "light" };
-    let (obs_base, obs_theme, relaunch_obs) = if dark {
-        ("dark", "obsidian", true)
-    } else {
-        ("light", "moonstone", false)
+    let mode = if dark { "dark" } else { "light" };
+    let (run_pywal, run_wallust) = classic_generators(settings().as_ref());
+
+    // Nothing heavy runs while awww animates: a palette tool, a GTK reload or
+    // Noctalia repainting its bar in the middle of the transition is what makes
+    // it stutter. They all hold off until it has started, then for as long as
+    // it lasts.
+    let transition_started = AtomicBool::new(false);
+    let after_transition = || {
+        while !transition_started.load(Ordering::Relaxed) {
+            thread::sleep(Duration::from_millis(20));
+        }
+        thread::sleep(TRANSITION_GUARD);
     };
 
-    // ── independent tasks launched in parallel ──────────────────
-    let mut handles = Vec::new();
+    thread::scope(|scope| {
+        scope.spawn(|| show_wallpaper(wallpaper, &transition_started));
 
-    // Nothing below depends on these, so they no longer delay the wallpaper.
-    // `-x` rather than `-f`: matching the whole command line would also kill
-    // anything that merely mentions feh, this script's own launcher included.
-    handles.push(thread::spawn(|| {
-        let _ = Command::new("pkill").args(["-x", "feh"]).status();
-    }));
+        // The quick ones: a few milliseconds each, so they share a thread.
+        scope.spawn(|| {
+            // `-x` rather than `-f`: matching the whole command line would also
+            // kill anything that merely mentions feh, this script's own
+            // launcher included.
+            let _ = Command::new("pkill").args(["-x", "feh"]).status();
+            let _ = Command::new("pkill").args(["-f", "ulauncher"]).status();
+            let cursor = if dark {
+                "Bibata-Modern-Classic"
+            } else {
+                "Bibata-Modern-Ice"
+            };
+            let _ = Command::new("hyprctl")
+                .args(["setcursor", cursor, "24"])
+                .status();
 
-    // set cursor theme based on mode (dark/light)
-    handles.push(thread::spawn(move || {
-        let cursor = if dark {
-            "Bibata-Modern-Classic"
-        } else {
-            "Bibata-Modern-Ice"
-        };
-        let _ = Command::new("hyprctl")
-            .args(["setcursor", cursor, "24"])
-            .status();
-    }));
-
-    // Wallpaper — kicked off first so the transition starts as early as possible
-    let _ = Command::new("awww")
-        .arg("img")
-        .arg(wallpaper)
-        .args([
-            "--transition-type",
-            "random",
-            "--transition-fps",
-            "60",
-            "--transition-duration",
-            "0.7",
-        ])
-        .status();
-
-    {
-        let wallpaper = wallpaper.to_path_buf();
-        handles.push(thread::spawn(move || {
-            let current_link = home_dir().join("Pictures/Wallpapers/current_wallpaper.jpg");
-            let _ = fs::remove_file(&current_link);
-            #[cfg(unix)]
+            // Renamed into place, so the link never goes missing in between.
+            let link = current_link();
+            let fresh = link.with_extension("new");
+            let _ = fs::remove_file(&fresh);
+            if std::os::unix::fs::symlink(wallpaper, &fresh)
+                .and_then(|()| fs::rename(&fresh, &link))
+                .is_err()
             {
-                let _ = std::os::unix::fs::symlink(&wallpaper, &current_link);
+                eprintln!("Erreur : impossible de mettre à jour {}.", link.display());
             }
-        }));
-    }
+        });
 
-    // Classic palette provider(s). Both run only when the menu and picker use
-    // different classic sources.
-    {
-        let wallpaper = wallpaper.to_path_buf();
-        let wal_flags: Vec<String> = wal_flags.into_iter().map(String::from).collect();
-        handles.push(thread::spawn(move || {
-            thread::sleep(TRANSITION_GUARD); // stay off the CPU while awww animates
+        // The still the menu draws behind itself, in /tmp.
+        scope.spawn(|| {
+            after_transition();
+            cache_wallpaper_still(wallpaper);
+        });
+
+        // Classic palette provider(s). Both run only when the menu and picker
+        // use different classic sources.
+        scope.spawn(|| {
+            after_transition();
             if run_pywal {
-                let status = Command::new("wal")
-                    .arg("-i")
-                    .arg(&wallpaper)
-                    .args(&wal_flags)
-                    .status();
-                if !status.map(|s| s.success()).unwrap_or(false) {
-                    eprintln!("Erreur pywal.");
-                }
+                // `-n`: pywal would otherwise set the wallpaper a second time
+                // itself, through a plain `awww img` — over the GIF player too.
+                let flags: &[&str] = if dark { &["-nq"] } else { &["-lnq"] };
+                run(Command::new("wal").arg("-i").arg(wallpaper).args(flags));
             }
-            if run_wallust {
-                let status = Command::new("wallust")
+            if run_wallust
+                && run(Command::new("wallust")
                     .arg("run")
-                    .arg(&wallpaper)
-                    .args(["--palette", wallust_palette])
-                    .status();
-                if !status.map(|s| s.success()).unwrap_or(false) {
-                    eprintln!("Erreur wallust.");
-                } else {
-                    if let Some(hook) = std::env::var_os("LUMEN_WALLUST_HOOK") {
-                        let hook_status = Command::new(hook)
-                            .env("LUMEN_DARK_MODE", if dark { "dark" } else { "light" })
-                            .env("LUMEN_WALLPAPER", &wallpaper)
-                            .status();
-                        if !hook_status.map(|s| s.success()).unwrap_or(false) {
-                            eprintln!("Le hook Wallust a échoué.");
-                        }
-                    }
-                    let cache = home_dir().join(".cache/wallust");
-                    if !cache.join("colors-rofi-dark.rasi").is_file()
-                        || !cache.join("colors.json").is_file()
-                    {
-                        eprintln!("Wallust: configurez les templates Lumen dans ~/.config/wallust/wallust.toml.");
-                    }
+                    .arg(wallpaper)
+                    .args(["--palette", mode]))
+            {
+                if let Some(hook) = std::env::var_os("LUMEN_WALLUST_HOOK") {
+                    run(Command::new(hook)
+                        .env("LUMEN_DARK_MODE", mode)
+                        .env("LUMEN_WALLPAPER", wallpaper));
+                }
+                let cache = home_dir().join(".cache/wallust");
+                if !cache.join("colors-rofi-dark.rasi").is_file()
+                    || !cache.join("colors.json").is_file()
+                {
+                    eprintln!(
+                        "Wallust: configurez les templates Lumen dans ~/.config/wallust/wallust.toml."
+                    );
                 }
             }
             reload_brave(run_wallust);
-        }));
-    }
+        });
 
-    // Copy /tmp (thumbnails for hyprpanel/hyprlock...)
-    {
-        let wallpaper = wallpaper.to_path_buf();
-        handles.push(thread::spawn(move || {
-            cache_wallpaper_still(&wallpaper);
-        }));
-    }
-
-    // Matugen (gtk/rofi/tmux/neovim theming)
-    {
-        let wallpaper = wallpaper.to_path_buf();
-        let matugen_mode = matugen_mode.to_string();
-        handles.push(thread::spawn(move || {
-            thread::sleep(TRANSITION_GUARD); // stay off the CPU while awww animates
-            let _ = Command::new("matugen")
+        // Matugen (gtk/rofi/tmux/neovim theming)
+        scope.spawn(|| {
+            after_transition();
+            run(Command::new("matugen")
                 .arg("image")
-                .arg(&wallpaper)
-                .args(["--mode", &matugen_mode])
-                .arg("-c")
+                .arg(wallpaper)
+                .args(["--mode", mode, "-c"])
                 .arg(home_dir().join(".config/matugen/config.toml"))
-                .args(["--prefer", "saturation", "-q"])
-                .status();
-        }));
-    }
+                .args(["--prefer", "saturation", "-q"]));
+        });
 
-    // Noctalia + Spicetify
-    {
-        let wallpaper = wallpaper.to_path_buf();
-        let skip_noctalia = std::env::var("LUMEN_SKIP_NOCTALIA").as_deref() == Ok("1");
-        handles.push(thread::spawn(move || {
-            if !skip_noctalia {
+        // Noctalia + Spicetify
+        scope.spawn(|| {
+            after_transition();
+            if std::env::var("LUMEN_SKIP_NOCTALIA").as_deref() != Ok("1") {
                 if !is_running("noctalia") {
                     let _ = Command::new("nohup")
                         .args(["noctalia", "-d"])
@@ -907,15 +1064,10 @@ fn apply_all(wallpaper: &Path, dark: bool) {
                         .spawn();
                     thread::sleep(Duration::from_secs(3));
                 }
-
-                let mode = if dark { "dark" } else { "light" };
-                let _ = Command::new("noctalia")
-                    .args(["msg", "theme-mode-set", mode])
-                    .status();
-                let _ = Command::new("noctalia")
+                run(Command::new("noctalia").args(["msg", "theme-mode-set", mode]));
+                run(Command::new("noctalia")
                     .args(["msg", "wallpaper-set"])
-                    .arg(&wallpaper)
-                    .status();
+                    .arg(wallpaper));
             }
 
             // A watcher already running sees Noctalia's rewrite of `color.ini`
@@ -937,45 +1089,30 @@ fn apply_all(wallpaper: &Path, dark: bool) {
                 }
                 ensure_spicetify_watch();
             }
-        }));
-    }
+        });
 
-    // Ulauncher
-    handles.push(thread::spawn(|| {
-        let _ = Command::new("pkill").args(["-f", "ulauncher"]).status();
-    }));
+        // Obsidian: Obsidian dark, Moonstone light.
+        scope.spawn(|| {
+            let vault = home_dir().join("Documents/Obsidian Vault/.obsidian");
+            update_json_field(&vault.join("app.json"), "baseTheme", mode);
+            let theme = if dark { "obsidian" } else { "moonstone" };
+            update_json_field(&vault.join("appearance.json"), "theme", theme);
 
-    // Obsidian
-    {
-        let obs_base = obs_base.to_string();
-        let obs_theme = obs_theme.to_string();
-        handles.push(thread::spawn(move || {
-            let vault_app = home_dir().join("Documents/Obsidian Vault/.obsidian/app.json");
-            let vault_appear =
-                home_dir().join("Documents/Obsidian Vault/.obsidian/appearance.json");
-            update_json_field(&vault_app, "baseTheme", &obs_base);
-            update_json_field(&vault_appear, "theme", &obs_theme);
-
-            if relaunch_obs {
-                let flatpak = Command::new("nohup")
-                    .args(["flatpak", "run", "md.obsidian.Obsidian"])
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .spawn();
-                if flatpak.is_err() {
-                    let _ = Command::new("nohup")
-                        .arg("obsidian")
+            if dark {
+                let launch = |program: &str, args: &[&str]| {
+                    Command::new("nohup")
+                        .arg(program)
+                        .args(args)
                         .stdout(Stdio::null())
                         .stderr(Stdio::null())
-                        .spawn();
+                        .spawn()
+                };
+                if launch("flatpak", &["run", "md.obsidian.Obsidian"]).is_err() {
+                    let _ = launch("obsidian", &[]);
                 }
             }
-        }));
-    }
-
-    for handle in handles {
-        let _ = handle.join();
-    }
+        });
+    });
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1093,10 +1230,7 @@ fn has_command(name: &str) -> bool {
 /// user-owned tmpfs, so the wallpaper list never reaches the disk, and the pid
 /// keeps two `lumen` runs from reading each other's answer.
 fn runtime_file(name: &str) -> PathBuf {
-    std::env::var_os("XDG_RUNTIME_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(std::env::temp_dir)
-        .join(format!("lumen-{name}-{}", std::process::id()))
+    runtime_dir().join(format!("lumen-{name}-{}", std::process::id()))
 }
 
 /// Shows one Quickshell prompt and waits for it.
@@ -1124,9 +1258,7 @@ fn run_quickshell(config: &Path, mode: &str, items: Option<&str>) -> Option<Stri
         .env("LUMEN_RESULT", &result);
     // Every window that draws a backdrop wants this, so it goes out on every
     // launch rather than only the ones that show one.
-    if let Some(path) =
-        current_wallpaper_path(&home_dir().join("Pictures/Wallpapers/current_wallpaper.jpg"))
-    {
+    if let Some(path) = current_wallpaper_path(&current_link()) {
         command.env("LUMEN_CURRENT_WALLPAPER", path);
     }
     if let Some(path) = &items_file {
@@ -1167,9 +1299,7 @@ fn quickshell_or_die(config: &Path, mode: &str, items: Option<&str>) -> String {
 /// no prompt, so a timer can call it.
 fn apply_time_of_day() {
     let moment = get_moment_journee();
-    if let Some(wp) =
-        pick_random(&home_dir().join(format!("Pictures/Wallpapers/season-time/{moment}")))
-    {
+    if let Some(wp) = pick_random(&wallpapers().join("season-time").join(moment)) {
         apply_all(&wp, moment == "night" || moment == "sunset");
     }
 }
@@ -1181,9 +1311,7 @@ fn apply_time_of_day() {
 /// settings panel has said once and for all.
 fn apply_season(shade: Shade) {
     let saison = get_saison();
-    if let Some(wp) =
-        pick_random(&home_dir().join(format!("Pictures/Wallpapers/season-time/{saison}")))
-    {
+    if let Some(wp) = pick_random(&wallpapers().join("season-time").join(saison)) {
         apply_all(&wp, shade.is_dark(Local::now().hour()));
     }
 }
@@ -1202,19 +1330,9 @@ fn season_shade_setting(settings: Option<&serde_json::Value>) -> Shade {
         .unwrap_or(Shade::Light)
 }
 
-fn selected_season_shade() -> Shade {
-    let settings = fs::read_to_string(home_dir().join(".config/lumen/settings.json"))
-        .ok()
-        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok());
-    season_shade_setting(settings.as_ref())
-}
-
 /// Path of the lock the unattended modes hold.
 fn auto_lock() -> PathBuf {
-    std::env::var_os("XDG_RUNTIME_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(std::env::temp_dir)
-        .join("lumen-auto.lock")
+    runtime_dir().join("lumen-auto.lock")
 }
 
 /// True when `pid` is a `lumen`, so a recycled pid is never killed by mistake.
@@ -1266,17 +1384,18 @@ fn open_settings(config: &Path) {
     // The panel has nowhere to write if this is a fresh install.
     let _ = fs::create_dir_all(home_dir().join(".config/lumen"));
 
-    let list = items_json(&wallpaper_entries(
-        &home_dir().join("Pictures/Wallpapers/dark"),
-    ));
+    let list = items_json(&wallpaper_entries(&wallpapers().join("dark")));
     quickshell_or_die(config, "settings", Some(&list));
 }
 
 /// Deletes thumbnails whose source image is gone (renamed or removed), which
 /// otherwise accumulate in the cache forever. Returns how many were freed.
-fn prune_thumbnails(thumb_dir: &Path, keep: &[(&PathBuf, PathBuf)]) -> (usize, u64) {
-    let live: std::collections::HashSet<&Path> =
-        keep.iter().map(|(_, thumb)| thumb.as_path()).collect();
+fn prune_thumbnails(thumb_dir: &Path, keep: &[(PathBuf, PathBuf)]) -> (usize, u64) {
+    let live: std::collections::HashSet<PathBuf> = keep
+        .iter()
+        .flat_map(|(img, thumb)| [Some(thumb.clone()), gif_preview(img, thumb)])
+        .flatten()
+        .collect();
 
     let Ok(entries) = fs::read_dir(thumb_dir) else {
         return (0, 0);
@@ -1284,7 +1403,7 @@ fn prune_thumbnails(thumb_dir: &Path, keep: &[(&PathBuf, PathBuf)]) -> (usize, u
     let (mut count, mut bytes) = (0, 0);
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.extension().is_none_or(|e| e != "png") || live.contains(path.as_path()) {
+        if path.extension().is_none_or(|e| e != "png" && e != "gif") || live.contains(&path) {
             continue;
         }
         let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
@@ -1299,20 +1418,8 @@ fn prune_thumbnails(thumb_dir: &Path, keep: &[(&PathBuf, PathBuf)]) -> (usize, u
 /// Builds every missing thumbnail for a directory without showing the picker,
 /// so the cache can be warmed ahead of time (`lumen --thumbs`).
 fn warm_thumbnails(dir: &Path) {
-    let thumb_dir = dir.join(".thumbnails");
-    if fs::create_dir_all(&thumb_dir).is_err() {
-        return;
-    }
-    let images = find_images(dir, &thumb_dir);
-    let pairs: Vec<(&PathBuf, PathBuf)> = images
-        .iter()
-        .filter_map(|img| {
-            let base_name = img.file_stem()?.to_string_lossy();
-            Some((img, thumb_dir.join(format!("{base_name}.png"))))
-        })
-        .collect();
-    generate_thumbnails(&pairs);
-    let (pruned, bytes) = prune_thumbnails(&thumb_dir, &pairs);
+    let pairs = wallpaper_entries(dir);
+    let (pruned, bytes) = prune_thumbnails(&dir.join(".thumbnails"), &pairs);
     println!(
         "{} : {} images, {} orphelins supprimés ({:.1} Mo)",
         dir.display(),
@@ -1333,6 +1440,7 @@ Usage:
                          without it, the menu's Season setting decides
   lumen --settings       the picker's settings: shape, motion, layout, color
   lumen --thumbs [DIR…]  rebuild the thumbnails without showing anything
+  lumen --restore        after login: bring an animated wallpaper back to life
   lumen --help           this
 
 The picker's settings also open from inside it, with Ctrl+, or by typing
@@ -1341,62 +1449,55 @@ or on the same Ctrl+,.";
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    if args.first().is_some_and(|a| a == "--help" || a == "-h") {
+    let flag = args.first().map(String::as_str);
+    if matches!(flag, Some("--help" | "-h")) {
         println!("{USAGE}");
         return;
     }
     // Nothing below draws before this: /tmp does not survive a reboot, and the
     // menu is the first thing that wants the image back.
     restore_current_wallpaper();
-    // Unattended: no prompt at all, for a timer or a keybind of its own.
-    if let Some(mode) = args.first().and_then(|arg| match arg.as_str() {
-        "--time" => Some(Mode::Heure),
-        "--season" => {
+
+    match flag {
+        // Unattended: no prompt at all, for a timer or a keybind of its own.
+        Some("--time" | "--season") => {
             let shade = match args.get(1) {
-                Some(word) => Shade::parse(word).unwrap_or_else(|| {
+                _ if flag == Some("--time") => None,
+                Some(word) => Some(Shade::parse(word).unwrap_or_else(|| {
                     eprintln!("Unknown season mode: {word} (dark, light or auto)\n\n{USAGE}");
                     std::process::exit(2);
-                }),
-                None => selected_season_shade(),
+                })),
+                None => Some(season_shade_setting(settings().as_ref())),
             };
-            Some(Mode::Saison(shade))
+            take_auto_lock();
+            match shade {
+                Some(shade) => apply_season(shade),
+                None => apply_time_of_day(),
+            }
+            let _ = fs::remove_file(auto_lock());
         }
-        _ => None,
-    }) {
-        take_auto_lock();
-        match mode {
-            Mode::Saison(shade) => apply_season(shade),
-            _ => apply_time_of_day(),
+        // `restore_current_wallpaper` above is all of it.
+        Some("--restore") => {}
+        Some("--settings") => open_settings(&quickshell_config()),
+        Some("--thumbs") => {
+            let dirs: Vec<PathBuf> = match &args[1..] {
+                [] => vec![wallpapers().join("dark"), wallpapers().join("light")],
+                given => given.iter().map(PathBuf::from).collect(),
+            };
+            dirs.iter().for_each(|dir| warm_thumbnails(dir));
         }
-        let _ = fs::remove_file(auto_lock());
-        return;
-    }
-    if args.first().is_some_and(|a| a == "--settings") {
-        open_settings(&quickshell_config());
-        return;
-    }
-    // An unknown flag is a typo, not a wallpaper directory: say so rather than
-    // opening the menu as if nothing had been asked for.
-    if args
-        .first()
-        .is_some_and(|a| a.starts_with('-') && a != "--thumbs")
-    {
-        eprintln!("Unknown option: {}\n\n{USAGE}", args[0]);
-        std::process::exit(2);
-    }
-    if args.first().is_some_and(|a| a == "--thumbs") {
-        let dirs: Vec<PathBuf> = if args.len() > 1 {
-            args[1..].iter().map(PathBuf::from).collect()
-        } else {
-            let base = home_dir().join("Pictures/Wallpapers");
-            vec![base.join("dark"), base.join("light")]
-        };
-        for dir in dirs {
-            warm_thumbnails(&dir);
+        // An unknown flag is a typo, not a wallpaper directory: say so rather
+        // than opening the menu as if nothing had been asked for.
+        Some(unknown) if unknown.starts_with('-') => {
+            eprintln!("Unknown option: {unknown}\n\n{USAGE}");
+            std::process::exit(2);
         }
-        return;
+        _ => menu(),
     }
+}
 
+/// `lumen` on its own: the mode menu, then whatever it answered.
+fn menu() {
     let _ = Command::new("nohup")
         .arg(home_dir().join(".config/.scripts/wallpaper_recognition.sh"))
         .stdout(Stdio::null())
@@ -1404,17 +1505,12 @@ fn main() {
         .spawn();
 
     let config = quickshell_config();
-
     match choose_mode(&config) {
-        // Dark — thumbnail picker
-        Some(Mode::Dark) => {
-            let wp = pick_with_quickshell(&config, &home_dir().join("Pictures/Wallpapers/dark"));
-            apply_all(&wp, true);
-        }
-        // Light — thumbnail picker
-        Some(Mode::Light) => {
-            let wp = pick_with_quickshell(&config, &home_dir().join("Pictures/Wallpapers/light"));
-            apply_all(&wp, false);
+        // Dark or Light — the thumbnail picker on that folder.
+        Some(mode @ (Mode::Dark | Mode::Light)) => {
+            let dark = mode == Mode::Dark;
+            let folder = wallpapers().join(if dark { "dark" } else { "light" });
+            apply_all(&pick_with_quickshell(&config, &folder), dark);
         }
         // Heure — random, dark if night/sunset
         Some(Mode::Heure) => apply_time_of_day(),
@@ -1515,6 +1611,13 @@ mod tests {
     #[test]
     fn spotify_main_is_told_apart_from_its_helpers() {
         assert!(is_spotify_main_cmdline(b"/opt/spotify/spotify\0--uri\0"));
+        // What a running Spotify really shows: one string, spaces and all.
+        assert!(is_spotify_main_cmdline(
+            b"/opt/spotify/spotify --remote-debugging-port=9222 --remote-allow-origins=http://localhost/ --uri\0"
+        ));
+        assert!(!is_spotify_main_cmdline(
+            b"/opt/spotify/spotify --type=renderer --lang=en-US\0"
+        ));
         assert!(is_spotify_main_cmdline(
             b"/opt/spotify/spotify\0--remote-debugging-port=9222\0"
         ));
@@ -1734,8 +1837,7 @@ color_scheme           = Comfy
         assert!(is_image(Path::new("foo.png")));
         assert!(is_image(Path::new("foo.gif")));
         assert!(is_image(Path::new("foo.WEBP")));
-        // the original find only matches these four extensions, no jpeg
-        assert!(!is_image(Path::new("foo.jpeg")));
+        assert!(is_image(Path::new("foo.jpeg")));
         assert!(!is_image(Path::new("foo.txt")));
         assert!(!is_image(Path::new("foo")));
     }
@@ -1817,7 +1919,7 @@ color_scheme           = Comfy
         let stray = thumb_dir.join("notes.txt");
         fs::write(&stray, b"x").unwrap();
 
-        let pairs = vec![(&img, kept.clone())];
+        let pairs = vec![(img.clone(), kept.clone())];
         let (count, bytes) = prune_thumbnails(&thumb_dir, &pairs);
 
         assert_eq!(count, 1);

@@ -20,6 +20,7 @@
 set -euo pipefail
 
 readonly REPO_URL="https://github.com/tungsten-w/lumen.git"
+readonly WALLRECO_URL="https://github.com/tungsten-w/wallreco"
 readonly DEFAULT_SRC="${XDG_DATA_HOME:-$HOME/.local/share}/lumen"
 
 # What quickshell_config() looks for. Compiled into the binary, so it is not
@@ -610,6 +611,39 @@ TOML
     say "Restart Anki once to load the add-on."
 }
 
+# ── wallreco ──────────────────────────────────────────────────────────
+# A project of its own, and nothing in lumen needs it — so it is offered, never
+# assumed. Saying no here loses nothing: the Tags tab of the settings panel
+# makes the same offer later.
+setup_wallreco() {
+    step "wallreco — a cool extra"
+    if command -v wallreco >/dev/null 2>&1 || [[ -x "$HOME/.local/bin/wallreco" ]]; then
+        skip "wallreco is already installed"
+        return 0
+    fi
+
+    say "wallreco looks at each wallpaper and writes what it sees into its name:"
+    say ""
+    say "  sunset.png  →  sunset-#orange-#warm-#sky.png"
+    say ""
+    say "so typing \"orange\" or \"sky\" in the picker finds it. Nothing leaves your"
+    say "machine, and \`wallreco --undo\` puts the old names back."
+    say "$WALLRECO_URL"
+    say ""
+    if ! confirm "Install wallreco too? (optional — a few minutes to build)"; then
+        skip "wallreco left out — the Tags tab in \`lumen --settings\` installs it later"
+        return 0
+    fi
+
+    # Same place as lumen itself: ~/.cargo/bin, no root, no checkout to keep.
+    if run cargo install --git "$WALLRECO_URL" --locked; then
+        ok "wallreco $( (( DRY_RUN )) && echo "would be" || echo "is") installed"
+        say "Tag your collection whenever you like:  wallreco $WALLPAPER_HOME"
+    else
+        warn "wallreco did not build. lumen works without it; try again from the Tags tab."
+    fi
+}
+
 # Prints `enabled` from one table of Noctalia's settings.toml, or nothing.
 noctalia_enabled() {
     local file="$1" table="$2"
@@ -687,6 +721,10 @@ summary() {
     say ""
     say "  bind = \$mainMod, W, exec, $HOME/.cargo/bin/lumen"
     say ""
+    say "And, if you use animated (GIF) wallpapers, so one comes back after login:"
+    say ""
+    say "  exec-once = $HOME/.cargo/bin/lumen --restore"
+    say ""
     say "  lumen              the menu"
     say "  lumen --settings   the panel, with the picker beside it"
     say "  lumen --thumbs     build the thumbnail cache now"
@@ -729,6 +767,7 @@ main() {
     setup_wallust
     setup_anki
     setup_noctalia_wallpaper
+    setup_wallreco
     summary
 }
 

@@ -33,6 +33,10 @@ cd lumen
 
 That's it — hit <kbd>Super</kbd>+<kbd>W</kbd> and pick an image.
 
+The installer also offers **[wallreco](https://github.com/tungsten-w/wallreco)**,
+a cool optional extra: it tags your wallpapers by colour and content, so you can
+type `orange` or `sky` in the picker and find them.
+
 Any other distribution, or you would rather do it yourself: **[Installation](#installation)**.
 
 ---

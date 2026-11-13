@@ -218,6 +218,13 @@ into `~/.config/wallust/templates/` and creates `~/.cache/wallust/`. It creates
 one, it leaves the file alone and prints the two entries to add from
 `$SRC/wallust/wallust.toml`.
 
+Last, the installer offers [wallreco](https://github.com/tungsten-w/wallreco) —
+a cool extra, and entirely optional. It tags your wallpapers by renaming them
+(`sunset.png` → `sunset-#orange-#warm-#sky.png`) so the picker's search finds
+them by colour or content. Say yes and it is built into `~/.cargo/bin` next to
+`lumen`; say no and nothing is lost, the **Tags** tab of the settings panel
+makes the same offer later.
+
 If Noctalia is installed, and its saved settings have it **not** draw the
 wallpaper, the installer asks to turn that on. Noctalia only shows the wallpaper
 in its panels (the control center banner, the glass behind them) when it draws
@@ -255,6 +262,7 @@ is already right.
 |---|---|---|
 | `~/.local/share/lumen` | The checkout, unless `--src` | `rm -rf` |
 | `~/.cargo/bin/lumen` | The binary | `cargo uninstall lumen` |
+| `~/.cargo/bin/wallreco` | wallreco, only if you say yes | `cargo uninstall wallreco` |
 | `~/.config/quickshell/lumen` | Symlink | `rm` |
 | `~/.config/wallust/templates/lumen-*` | Symlinks, if Wallust is present | `rm` |
 | `~/.config/wallust/wallust.toml` | Created only if absent | Keep or remove as you prefer |

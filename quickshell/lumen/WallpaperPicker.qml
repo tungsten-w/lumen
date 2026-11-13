@@ -752,7 +752,9 @@ OverlayWindow {
                         height: Style.picker.iconBox
                         fillMode: Image.PreserveAspectFit
 
-                        source: element.current && element.isGif ? Style.fileUrl(element.modelData.path) : ""
+                        // The small preview lumen built, or the GIF itself
+                        // when there is none (no ffmpeg on this machine).
+                        source: element.current && element.isGif ? Style.fileUrl(element.modelData.preview || element.modelData.path) : ""
                         asynchronous: true
                         cache: false
                         sourceSize.width: Math.ceil(Style.picker.iconBox * Screen.devicePixelRatio)
